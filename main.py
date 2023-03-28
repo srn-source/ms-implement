@@ -151,8 +151,8 @@ def evaluate(dev_data, label_losses):
         label_loss = {l:np.sum(label_losses[l][idx]) for l in label_losses}
         #print("label_loss = ",label_loss)
         prediction = sorted(label_loss.items(), key=lambda x: x[1])[0][0]
-        #print("label = ", label)
-        #print("prediction = ",prediction)
+        # print("label = ", label)
+        # print("prediction = ",prediction)
         
         # print("label = ", type(label))
         # print("prediction = ",type(prediction))
@@ -179,14 +179,15 @@ def main(args):
     bos_token_id = tokenizer.bos_token_id
     eos_token_id = tokenizer.eos_token_id
     
-    main_class = SST2Processor(args.k, args.seed, args.dataset ,tokenizer )
+    main_class = SST2Processor(args.k, args.train_seed, args.dataset ,tokenizer, args.kate_metric , args.reversed)
     test_inputs_with_label , test_inputs_token , data_token_with_space = main_class.generate_test_set()
     # dev_data = []
     
     # train_data_for_fewshot = SST2Processor(args.k, args.seed, args.dataset , tmp,tmp_idx, tokenizer , "Train")
     # demonstrations , test_inputs, dev_data = train_data_for_fewshot.generate_datasets()
-    
-    
+    group_id_kate = []
+    if args.kate:
+        group_id_kate = main_class.kate_process()
     
     accs = []
     for idx, (tmp,tmp_idx) in enumerate(zip(templates,templates_idx)):
@@ -201,11 +202,22 @@ def main(args):
         for i in label_words:
             if args.method == "direct":
                 
-                demonstrations  = main_class.generate_setOfDemon(tmp)
-                
                 prefix = tokenizer(" " +(tmp % i))["input_ids"] 
-                prompt = [demonstrations.copy() + test_input + prefix[:tmp_idx] for test_input in test_inputs_token]
-                print("prompt = ",len(prompt))
+                
+                if args.kate:
+                    
+                    #prefix = tokenizer(" " +(tmp % i))["input_ids"] 
+                    
+                    prompt = main_class.kate_generate_promt(group_id_kate , test_inputs_token , prefix[:tmp_idx] , tmp)
+                    print("prompt = ",len(prompt))
+                    
+                else:
+                    demonstrations  = main_class.generate_setOfDemon(tmp)
+                    
+                    #prefix = tokenizer(" " +(tmp % i))["input_ids"] 
+                    prompt = [demonstrations.copy() + test_input + prefix[:tmp_idx] for test_input in test_inputs_token]
+                    print("prompt = ",len(prompt))
+                    
                 tensor = prepro_sentence_pair(prompt,
                                                 [prefix[tmp_idx:-1]], max_length,
                                                 bos_token_id, eos_token_id, method = "direct",
@@ -213,20 +225,26 @@ def main(args):
                 input_tensors.append(tensor)
                 
             elif args.method == "channel":
-                demonstrations  = main_class.generate_setOfDemon_channel(tmp)
                 
                 prefix = tokenizer(" "+(tmp % i))["input_ids"] 
                 
-                # demon_direct = []
-                # out_direct = []
-                # for u in data_token_with_space:
-                #     demon_direct.append(demonstrations.copy() + prefix)
-                #     out_direct.append(u)
-                
-                # logging.info("channel INPUT:")
-                # logging.info(tokenizer.decode(demon_direct[0]))
-                # logging.info(tokenizer.decode(out_direct[0]))
-                prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
+                if args.kate:
+                    #print("")
+                    prompt = main_class.kate_generate_promt_channel(group_id_kate , data_token_with_space , prefix , tmp)
+                    print("prompt = ",len(prompt))
+                else:
+                    demonstrations  = main_class.generate_setOfDemon_channel(tmp)
+                    
+                    # demon_direct = []
+                    # out_direct = []
+                    # for u in data_token_with_space:
+                    #     demon_direct.append(demonstrations.copy() + prefix)
+                    #     out_direct.append(u)
+                    
+                    # logging.info("channel INPUT:")
+                    # logging.info(tokenizer.decode(demon_direct[0]))
+                    # logging.info(tokenizer.decode(out_direct[0]))
+                    prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
                 
                 # print("demon_direct = ",len(demon_direct))
                 # print("out_direct = ",len(out_direct))
@@ -252,6 +270,22 @@ def main(args):
         logging.info("Output:")
         logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
         
+        logging.info("=================================================================================================")
+        logging.info("Checking the first example...")
+        input_ids = input_tensors[0]["input_ids"][1].numpy().tolist()
+        token_type_ids = input_tensors[0]["token_type_ids"][1].numpy().tolist()
+        logging.info("Input:")
+        logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
+        logging.info("Output:")
+        logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
+        logging.info("==================================================")
+        logging.info("Checking the Second example...")
+        input_ids = input_tensors[1]["input_ids"][1].numpy().tolist()
+        token_type_ids = input_tensors[1]["token_type_ids"][1].numpy().tolist()
+        logging.info("Input:")
+        logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
+        logging.info("Output:")
+        logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
         #print("input_tensors = ",len(input_tensors))
         losses = []
         for input_tensor in input_tensors:
@@ -260,6 +294,7 @@ def main(args):
                                         batch_size)
                 losses.append(loss_infer)
         
+        print("loss len= ", len(losses))
         acc = evaluate(test_inputs_with_label, {str(i): loss for i, loss in enumerate(losses)})
         accs.append(acc)
         logging.info(f"Acc = {acc}")
@@ -271,11 +306,13 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", type=str, default="SST2")
     parser.add_argument("--method", type=str, default="channel")
     parser.add_argument("--gpt2", type=str, default="gpt2-large")
-    parser.add_argument("--seed", type=str, default="48")
-    parser.add_argument("--train_seed", type=int, default=42)
+    #parser.add_argument("--seed", type=str, default="48")
+    parser.add_argument("--train_seed", type=int, default=99)
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--k", type=int, default=16)
-    
+    parser.add_argument("--k", type=int, default=7)
+    parser.add_argument("--kate", action='store_true', help='enable kate' )
+    parser.add_argument("--kate_metric", type=str, default="cosine"  ,help="euclidean or cosine" )
+    parser.add_argument("--reversed", action='store_true', help='cosine kate reversed' )
     args = parser.parse_args()
     print(args)
     main(args)
