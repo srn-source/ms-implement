@@ -9,21 +9,24 @@ from transformers import RobertaTokenizer, RobertaModel
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import pairwise
-
+from transformers import GPT2Tokenizer, GPT2Model
 logging.basicConfig(level = logging.INFO)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class SST2Processor():
-    def __init__(self,  k, seed, dataset, tokenizer, kate_metric,reversedCosi):
-        self.dataset_name = "SetFit/sst2"
+    def __init__(self,  k, seed, dataset, tokenizer, kate_metric,reversedCosi , encoder_kate, use_calibration):
+        self.dataset_name = dataset
         self.tokenizer = tokenizer
         self.seed = seed
         self.k = k
         dataset1 = load_dataset(self.dataset_name)
         self.train_split = dataset1["train"]
         self.test_split = dataset1["test"]
-        self.val_split = dataset1["validation"]
+        #self.val_split = dataset1["validation"]
         self.kate_metric = kate_metric
         self.reversed = reversedCosi
+        self.encoder_kate = encoder_kate
+        self.use_calibration = use_calibration
+        
         self.train_id = random.sample(range(len(self.train_split)), k=self.k)
         # self.template = template
         # self.tmp_idx = tmp_idx
@@ -42,6 +45,9 @@ class SST2Processor():
         for key in few_train:
             text = key['text'].strip()
             label = int(key['label'])
+            
+            if text[-1] != ".":
+                text = text + " ."
             
             tokens_input = self.tokenizer(text)["input_ids"] 
             tokens_label = self.tokenizer(" " + (template % label_words[label]))["input_ids"] 
@@ -64,6 +70,9 @@ class SST2Processor():
             text = key['text'].strip()
             label = int(key['label'])
             
+            if text[-1] != ".":
+                text = text + " ."
+                
             p = (template % label_words[label])
             if len(demonstrations)>0:
                 p = " " + p
@@ -174,9 +183,11 @@ class SST2Processor():
 
     def kate_process(self):
         #corpus = dev_corpus + train_corpus
-        tok = RobertaTokenizer.from_pretrained("roberta-large")
-        model = RobertaModel.from_pretrained("roberta-large")
-        
+        tok = RobertaTokenizer.from_pretrained(self.encoder_kate)
+        model = RobertaModel.from_pretrained(self.encoder_kate)
+    
+        logging.info("Start Encoder : {}".format(self.encoder_kate))
+         
         test_text = []
         test_label = []
         c = 0
@@ -247,21 +258,27 @@ class SST2Processor():
     
     def kate_generate_promt(self, group_id_kate , test_inputs_token , prefix , template):
         prompt = []
+        prompt_calibration = []
+        na_token = self.tokenizer("N/A")["input_ids"]
         for test_input, group_id in zip(test_inputs_token, group_id_kate):
             #print("group_id = ",group_id)
             demonstrations = self.generate_setOfDemon(template , group_id)
             prompt1 = demonstrations.copy() + test_input + prefix
+            prompt2 = demonstrations.copy() + na_token + prefix
             prompt.append(prompt1)
-        return prompt
+            prompt_calibration.append(prompt2)
+        return prompt , prompt_calibration
     
     def kate_generate_promt_channel(self, group_id_kate , data_token_with_space , prefix , template):
         
         #prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
         
         prompt = []
+        
         for test_input, group_id in zip(data_token_with_space, group_id_kate):
             #print("group_id = ",group_id)
             demonstrations = self.generate_setOfDemon_channel(template , group_id)
             prompt1 = demonstrations.copy() + prefix
+            
             prompt.append(prompt1)
         return prompt
