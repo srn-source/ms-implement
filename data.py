@@ -13,7 +13,7 @@ from transformers import GPT2Tokenizer, GPT2Model
 logging.basicConfig(level = logging.INFO)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class SST2Processor():
-    def __init__(self,  k, seed, dataset, tokenizer, kate_metric,reversedCosi , encoder_kate, use_calibration):
+    def __init__(self,  k, seed, dataset, tokenizer, kate_metric,reversedCosi , encoder_kate, use_calibration, ensemble):
         self.dataset_name = dataset
         self.tokenizer = tokenizer
         self.seed = seed
@@ -26,6 +26,7 @@ class SST2Processor():
         self.reversed = reversedCosi
         self.encoder_kate = encoder_kate
         self.use_calibration = use_calibration
+        self.ensemble = ensemble
         
         self.train_id = random.sample(range(len(self.train_split)), k=self.k)
         # self.template = template
@@ -252,33 +253,101 @@ class SST2Processor():
         
         #prompt = [demonstrations.copy() + test_input + prefix[:tmp_idx] for test_input in test_inputs_token]
         
-        
-        
         return kNN_dev_train
     
     def kate_generate_promt(self, group_id_kate , test_inputs_token , prefix , template):
         prompt = []
         prompt_calibration = []
         na_token = self.tokenizer("N/A")["input_ids"]
+        label_words = ["terrible", "great"]
+        
         for test_input, group_id in zip(test_inputs_token, group_id_kate):
             #print("group_id = ",group_id)
-            demonstrations = self.generate_setOfDemon(template , group_id)
-            prompt1 = demonstrations.copy() + test_input + prefix
-            prompt2 = demonstrations.copy() + na_token + prefix
-            prompt.append(prompt1)
-            prompt_calibration.append(prompt2)
+            if self.ensemble:
+                for g_id in group_id:
+                    #prompt1 = demonstrations.copy() + test_input + prefix
+                    
+                    few_train = self.train_split[g_id]
+                    text = few_train['text'].strip()
+                    label = int(few_train['label'])
+                    
+                    if text[-1] != ".":
+                        text = text + " ."
+                        
+                    tokens_input = self.tokenizer(text)["input_ids"] 
+                    tokens_label = self.tokenizer(" " + (template % label_words[label]))["input_ids"] 
+                    
+                    prompt1 = tokens_input + tokens_label + test_input + prefix
+                    prompt2 = tokens_input + tokens_label + na_token + prefix
+                    
+                    prompt.append(prompt1)
+                    prompt_calibration.append(prompt2)
+            else:
+                demonstrations = self.generate_setOfDemon(template , group_id)
+                prompt1 = demonstrations.copy() + test_input + prefix
+                prompt2 = demonstrations.copy() + na_token + prefix
+                prompt.append(prompt1)
+                prompt_calibration.append(prompt2)
+                
         return prompt , prompt_calibration
+    
+    def ensemble_generate_promt(self, test_inputs_token , prefix , template):
+        prompt = []
+        prompt_calibration = []
+        na_token = self.tokenizer("N/A")["input_ids"]
+        label_words = ["terrible", "great"]
+        
+        few_train = [self.train_split[i] for i in self.train_id]
+        for test_input in test_inputs_token:
+            for key in few_train:
+                text = key['text'].strip()
+                label = int(key['label'])
+                
+                if text[-1] != ".":
+                    text = text + " ."
+                            
+                tokens_input = self.tokenizer(text)["input_ids"] 
+                tokens_label = self.tokenizer(" " + (template % label_words[label]))["input_ids"] 
+                        
+                prompt1 = tokens_input + tokens_label + test_input + prefix
+                prompt2 = tokens_input + tokens_label + na_token + prefix
+                        
+                prompt.append(prompt1)
+                prompt_calibration.append(prompt2)
+            
+        return prompt , prompt_calibration
+    
     
     def kate_generate_promt_channel(self, group_id_kate , data_token_with_space , prefix , template):
         
         #prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
-        
         prompt = []
-        
+        label_ensemble = []
+        label_words = ["terrible", "great"]
         for test_input, group_id in zip(data_token_with_space, group_id_kate):
             #print("group_id = ",group_id)
-            demonstrations = self.generate_setOfDemon_channel(template , group_id)
-            prompt1 = demonstrations.copy() + prefix
-            
-            prompt.append(prompt1)
-        return prompt
+            if self.ensemble:
+                for g_id in group_id:
+                    
+                    few_train = self.train_split[g_id]
+                    text = few_train['text'].strip()
+                    label = int(few_train['label'])
+                        
+                    if text[-1] != ".":
+                        text = text + " ."
+                            
+                    p = (template % label_words[label])
+                    
+                    tokens_input = self.tokenizer(text)["input_ids"] 
+                    tokens_label = self.tokenizer(p)["input_ids"] 
+                    prompt1 = tokens_label + tokens_input + prefix
+                    
+                    
+                    prompt.append(prompt1)
+                    label_ensemble.append(test_input)
+            else:
+                demonstrations = self.generate_setOfDemon_channel(template , group_id)
+                prompt1 = demonstrations.copy() + prefix
+                
+                prompt.append(prompt1)
+        return prompt , label_ensemble

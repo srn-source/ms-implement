@@ -115,6 +115,24 @@ def inference(model, inputs, batch_size,k,return_logits=False):
 
     return all_losses
 
+def flatten_label_losses(label_losses, dev_data):
+    print("label_losses[0] ========= ",len(label_losses[0]))
+    print("label_losses[1] ========= ",len(label_losses[1]))
+    print("len label_losses" , len(label_losses))
+    print("len(dev_data) = ",len(dev_data))
+    # print("label_losses ========= ",label_losses[0])
+    for label in range(len(label_losses)):
+        k = int(len(label_losses[label]) / len(dev_data))
+        print("k = ",k)
+        print("label = ",label)
+        label_losses[label] = [label_losses[label][k*i:k*(i+1)] for i in range(len(dev_data))]
+        
+        print("label_losses ==== test1 ===",label_losses[label][k*0:k*(0+1)])
+    print("label_losses [0] ========= ",len(label_losses[0]))
+    print("label_losses [1] ========= ",len(label_losses[1]))
+    print("label_losses [0][0] ========= ",label_losses[0][0])
+    return label_losses
+
 def run_model(model, input_ids, attention_mask, token_type_ids,
               labels=None, return_logits=False):
     #print("llll")
@@ -180,7 +198,7 @@ def main(args):
     bos_token_id = tokenizer.bos_token_id
     eos_token_id = tokenizer.eos_token_id
     
-    main_class = SST2Processor(args.k, args.train_seed, args.dataset ,tokenizer, args.kate_metric , args.reversed , args.encoder_kate , args.use_calibration )
+    main_class = SST2Processor(args.k, args.train_seed, args.dataset ,tokenizer, args.kate_metric , args.reversed , args.encoder_kate , args.use_calibration , args.ensemble )
     test_inputs_with_label , test_inputs_token , data_token_with_space = main_class.generate_test_set()
     # dev_data = []
     
@@ -189,6 +207,8 @@ def main(args):
     group_id_kate = []
     if args.kate:
         group_id_kate = main_class.kate_process()
+        
+    #print("group_id_kate === ", group_id_kate)
     
     accs = []
     for idx, (tmp,tmp_idx) in enumerate(zip(templates,templates_idx)):
@@ -198,7 +218,7 @@ def main(args):
         input_tensors = []
         input_tensors_calibration = []
         #train_data_for_fewshot = SST2Processor(args.k, args.seed, args.dataset , tmp,tmp_idx, tokenizer , "Train")
-        
+        label_ensemble = []
         
         for i in label_words:
             if args.method == "direct":
@@ -206,17 +226,22 @@ def main(args):
                 prefix = tokenizer(" " +(tmp % i))["input_ids"] 
                 na_token = tokenizer("N/A")["input_ids"]
                 
-                if args.kate :
+                if args.kate : #not support zero shot
                     assert args.k > 0
+                    
                     prompt , prompt_calibration= main_class.kate_generate_promt(group_id_kate , test_inputs_token , prefix[:tmp_idx] , tmp)
                     print("prompt = ",len(prompt))
                     
                 else:
                     if args.k > 0:
-                        demonstrations  = main_class.generate_setOfDemon(tmp)
-                        prompt = [demonstrations.copy() + test_input + prefix[:tmp_idx] for test_input in test_inputs_token]
-                        prompt_calibration = [demonstrations.copy() + na_token + prefix[:tmp_idx] for test_input in test_inputs_token]
-                    else:
+                        if args.ensemble:
+                            prompt , prompt_calibration= main_class.ensemble_generate_promt(test_inputs_token , prefix[:tmp_idx] , tmp)
+                        else:
+                            demonstrations  = main_class.generate_setOfDemon(tmp)
+                            prompt = [demonstrations.copy() + test_input + prefix[:tmp_idx] for test_input in test_inputs_token]
+                            prompt_calibration = [demonstrations.copy() + na_token + prefix[:tmp_idx] for test_input in test_inputs_token]
+                    else: #zero shot case
+                        assert not args.ensemble
                         prompt = [test_input + prefix[:tmp_idx] for test_input in test_inputs_token]
                         prompt_calibration = [na_token + prefix[:tmp_idx] for test_input in test_inputs_token]
                     
@@ -229,6 +254,7 @@ def main(args):
                 input_tensors.append(tensor)
                 
                 if args.use_calibration:
+                    assert not args.ensemble
                     tensor_calibrate = prepro_sentence_pair(prompt_calibration,
                                                 [prefix[tmp_idx:-1]], max_length,
                                                 bos_token_id, eos_token_id, method = "direct",
@@ -237,22 +263,27 @@ def main(args):
                 
                 
             elif args.method == "channel":
-                assert args.use_calibration == False
+                assert not args.use_calibration
                 prefix = tokenizer(" "+(tmp % i))["input_ids"] 
                 #na_token = tokenizer("N/A")["input_ids"]
                 
                 if args.kate :
                     assert args.k > 0
-                    prompt = main_class.kate_generate_promt_channel(group_id_kate , data_token_with_space , prefix , tmp)
+                    prompt, label_ensemble = main_class.kate_generate_promt_channel(group_id_kate , data_token_with_space , prefix , tmp)
                     print("prompt = ",len(prompt))
+                    # tensor = prepro_sentence_pair(prompt , label_ensemble if args.ensemble else data_token_with_space , max_length,
+                    #                         bos_token_id, eos_token_id, method = "channel",
+                    #                         allow_truncation=True)
                 else:
                     if args.k > 0:
                         demonstrations  = main_class.generate_setOfDemon_channel(tmp)
                         prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
-                    else:
+                    else: #zero shot case
+                        assert not args.ensemble
                         prompt = [prefix for test_input in data_token_with_space]
                         
-                tensor = prepro_sentence_pair(prompt , data_token_with_space , max_length,
+
+                tensor = prepro_sentence_pair(prompt , label_ensemble if args.ensemble else data_token_with_space , max_length,
                                             bos_token_id, eos_token_id, method = "channel",
                                             allow_truncation=True)
                 input_tensors.append(tensor)
@@ -262,43 +293,44 @@ def main(args):
                 #                             bos_token_id, eos_token_id, method = "channel",
                 #                             allow_truncation=True)
                 #     input_tensors_calibration.append(tensor_calibrate)
-                    
-                
-        logging.info("Checking the first example...")
-        input_ids = input_tensors[0]["input_ids"][0].numpy().tolist()
-        token_type_ids = input_tensors[0]["token_type_ids"][0].numpy().tolist()
-        logging.info("Input:")
-        logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
-        logging.info("Output:")
-        logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
-        logging.info("==================================================")
-        logging.info("Checking the Second example...")
-        input_ids = input_tensors[1]["input_ids"][0].numpy().tolist()
-        token_type_ids = input_tensors[1]["token_type_ids"][0].numpy().tolist()
-        logging.info("Input:")
-        logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
-        logging.info("Output:")
-        logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
-        
-        logging.info("=================================================================================================")
-        logging.info("Checking the first example...")
-        input_ids = input_tensors[0]["input_ids"][1].numpy().tolist()
-        token_type_ids = input_tensors[0]["token_type_ids"][1].numpy().tolist()
-        logging.info("Input:")
-        logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
-        logging.info("Output:")
-        logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
-        logging.info("==================================================")
-        logging.info("Checking the Second example...")
-        input_ids = input_tensors[1]["input_ids"][1].numpy().tolist()
-        token_type_ids = input_tensors[1]["token_type_ids"][1].numpy().tolist()
-        logging.info("Input:")
-        logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
-        logging.info("Output:")
-        logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
+        for i in range(args.k +1):
+            logging.info("Checking the first example...")
+            input_ids = input_tensors[0]["input_ids"][i].numpy().tolist()
+            token_type_ids = input_tensors[0]["token_type_ids"][i].numpy().tolist()
+            logging.info("Input:")
+            logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
+            logging.info("Output:")
+            logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
+            
+        logging.info("=========================================================")
+        for i in range(args.k +1):
+            
+            logging.info("Checking the Second example...")
+            input_ids = input_tensors[1]["input_ids"][i].numpy().tolist()
+            token_type_ids = input_tensors[1]["token_type_ids"][i].numpy().tolist()
+            logging.info("Input:")
+            logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
+            logging.info("Output:")
+            logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
+            
+            # logging.info("=================================================================================================")
+            # logging.info("Checking the first example...")
+            # input_ids = input_tensors[0]["input_ids"][1].numpy().tolist()
+            # token_type_ids = input_tensors[0]["token_type_ids"][1].numpy().tolist()
+            # logging.info("Input:")
+            # logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
+            # logging.info("Output:")
+            # logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
+            # logging.info("==================================================")
+            # logging.info("Checking the Second example...")
+            # input_ids = input_tensors[1]["input_ids"][1].numpy().tolist()
+            # token_type_ids = input_tensors[1]["token_type_ids"][1].numpy().tolist()
+            # logging.info("Input:")
+            # logging.info(tokenizer.decode(input_ids[:token_type_ids.index(1)]))
+            # logging.info("Output:")
+            # logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
         #print("input_tensors = ",len(input_tensors))
-        
-        
+
         if args.use_calibration:
             logging.info("Checking the first example... use_calibration")
             input_ids = input_tensors_calibration[0]["input_ids"][0].numpy().tolist()
@@ -332,8 +364,6 @@ def main(args):
             logging.info("Output:")
             logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
         
-        
-        
         losses = []
         
         for input_tensor in input_tensors:
@@ -341,7 +371,10 @@ def main(args):
                                         input_tensor,
                                         batch_size , args.k)
                 losses.append(loss_infer)
-                
+        
+        if args.ensemble:
+            losses = flatten_label_losses(losses, test_inputs_token)
+            
         if args.use_calibration:
             losses_calibration = []
             for input_tensor in input_tensors_calibration:
@@ -368,12 +401,12 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", type=str, default="SetFit/sst2" , help="SetFit/sst2 ,SetFit/SentEval-CR")
     parser.add_argument("--method", type=str, default="direct")
     parser.add_argument("--gpt2", type=str, default="gpt2-large")
-    #parser.add_argument("--seed", type=str, default="48")
+    parser.add_argument("--ensemble", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=99 , help="{13|21|42|87|100}")
     parser.add_argument("--batch_size", type=int, default=32 )
-    parser.add_argument("--k", type=int, default=1)
+    parser.add_argument("--k", type=int, default=3)
     parser.add_argument("--kate", action='store_true', help='enable kate' )
-    parser.add_argument("--kate_metric", type=str, default="euclidean"  ,help="euclidean or cosine" )
+    parser.add_argument("--kate_metric", type=str, default="cosine"  ,help="euclidean or cosine" )
     parser.add_argument('--encoder_kate', default='roberta-base', type=str, help='roberta-base, roberta-large')
     parser.add_argument("--reversed", action='store_true', help='cosine kate reversed' )
     parser.add_argument("--use_calibration", default=False, action="store_true")
