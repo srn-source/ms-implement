@@ -7,7 +7,7 @@ import numpy as np
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from tqdm import tqdm
 import logging
-
+import copy
 
 logging.basicConfig(level = logging.INFO)
 
@@ -15,6 +15,10 @@ label_words = ["terrible", "great"]
 templates = ["A %s one . ", "It was %s . ",
                      "All in all %s . ", "A %s piece . "]
 templates_idx = [1,2,3,1]
+
+model = GPT2LMHeadModel.from_pretrained("gpt2-large")
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2-large")
+
 def seed_every_thing(train_seed):
     random.seed(train_seed)
     np.random.seed(train_seed)
@@ -30,9 +34,15 @@ def prepro_sentence_pair_single(ids1, ids2, max_length,
         ids1 = [bos_token_id] + ids1
     if eos_token_id is not None:
         ids2 = ids2 + [eos_token_id] #remove last space
+    
+    if  len(ids1)+len(ids2) > max_length:
+        print("lennnnnnn = ",len(ids1)+len(ids2))
         
     if allow_truncation and len(ids1)+len(ids2) > max_length:
         ids1 = ids1[len(ids1)+len(ids2)-max_length:] # len = max_length-len(ids2)
+        # print("len(ids1) = ",len(ids1))
+        # print("len(ids2) = ",len(ids2))
+        # print("max_length = ",max_length)
         assert len(ids1)+len(ids2)==max_length
 
 
@@ -55,6 +65,9 @@ def prepro_sentence_pair(train_inputs, test_inputs, max_length,
         for test_input in test_inputs:
             for train_input in train_inputs:
                 
+                print("train_input = ",tokenizer.decode(train_input))
+                print("test_input = ",tokenizer.decode(test_input))
+                print("+++++++++++++++++++++++++++++++++++++++++++++")
                 _input_ids, _attention_mask, _token_type_ids = \
                     prepro_sentence_pair_single(train_input, test_input, max_length,
                                                 bos_token_id, eos_token_id,
@@ -64,7 +77,9 @@ def prepro_sentence_pair(train_inputs, test_inputs, max_length,
                 token_type_ids.append(_token_type_ids)
     else:
         for input_ch , label_ch in zip(train_inputs, test_inputs):
-            
+            print("train_input = ",tokenizer.decode(input_ch))
+            print("test_input = ",tokenizer.decode(label_ch))
+            print("+++++++++++++++++++++++++++++++++++++++++++++")
             _input_ids, _attention_mask, _token_type_ids = \
                     prepro_sentence_pair_single(input_ch, label_ch, max_length,
                                                 bos_token_id, eos_token_id,
@@ -185,8 +200,7 @@ def evaluate(dev_data, label_losses):
 def main(args):
     
     seed_every_thing(args.train_seed)
-    tokenizer = GPT2Tokenizer.from_pretrained(args.gpt2)
-    model = GPT2LMHeadModel.from_pretrained(args.gpt2)
+    #tokenizer = GPT2Tokenizer.from_pretrained(args.gpt2)
     
     for param in model.parameters():
         param.requires_grad = False
@@ -194,7 +208,7 @@ def main(args):
     max_length = 128
     batch_size = args.batch_size
     
-    tokenizer = GPT2Tokenizer.from_pretrained(args.gpt2)
+    
     bos_token_id = tokenizer.bos_token_id
     eos_token_id = tokenizer.eos_token_id
     
@@ -228,14 +242,16 @@ def main(args):
                 
                 if args.kate : #not support zero shot
                     assert args.k > 0
-                    
-                    prompt , prompt_calibration= main_class.kate_generate_promt(group_id_kate , test_inputs_token , prefix[:tmp_idx] , tmp)
-                    print("prompt = ",len(prompt))
-                    
+                    if args.ensemble:
+                        prompt , prompt_calibration= main_class.ensemble_generate_promt(test_inputs_token , prefix[:tmp_idx] , tmp , group_id_kate)
+                    else:
+                        prompt , prompt_calibration= main_class.kate_generate_promt(group_id_kate , test_inputs_token , prefix[:tmp_idx] , tmp)
+                        print("prompt = ",len(prompt))
+                        
                 else:
                     if args.k > 0:
                         if args.ensemble:
-                            prompt , prompt_calibration= main_class.ensemble_generate_promt(test_inputs_token , prefix[:tmp_idx] , tmp)
+                            prompt , prompt_calibration= main_class.ensemble_generate_promt(test_inputs_token , prefix[:tmp_idx] , tmp )
                         else:
                             demonstrations  = main_class.generate_setOfDemon(tmp)
                             prompt = [demonstrations.copy() + test_input + prefix[:tmp_idx] for test_input in test_inputs_token]
@@ -249,12 +265,12 @@ def main(args):
                     
                 tensor = prepro_sentence_pair(prompt,
                                                 [prefix[tmp_idx:-1]], max_length,
-                                                bos_token_id, eos_token_id, method = "direct",
-                                                allow_truncation=True)
+                                                bos_token_id, eos_token_id,  method = "direct",
+                                                allow_truncation=True )
                 input_tensors.append(tensor)
                 
                 if args.use_calibration:
-                    assert not args.ensemble
+                     
                     tensor_calibrate = prepro_sentence_pair(prompt_calibration,
                                                 [prefix[tmp_idx:-1]], max_length,
                                                 bos_token_id, eos_token_id, method = "direct",
@@ -266,24 +282,32 @@ def main(args):
                 assert not args.use_calibration
                 prefix = tokenizer(" "+(tmp % i))["input_ids"] 
                 #na_token = tokenizer("N/A")["input_ids"]
-                
+                label_ = []
                 if args.kate :
                     assert args.k > 0
-                    prompt, label_ensemble = main_class.kate_generate_promt_channel(group_id_kate , data_token_with_space , prefix , tmp)
-                    print("prompt = ",len(prompt))
-                    # tensor = prepro_sentence_pair(prompt , label_ensemble if args.ensemble else data_token_with_space , max_length,
-                    #                         bos_token_id, eos_token_id, method = "channel",
-                    #                         allow_truncation=True)
+                    if args.ensemble:
+                        prompt, label_ = main_class.kate_generate_promt_channel( data_token_with_space , prefix , tmp, group_id_kate)
+                        print("prompt = ",len(prompt))
+                    else:
+                        #demonstrations  = main_class.generate_setOfDemon_channel(tmp, group_id_kate)
+                        #prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
+                        prompt, label_ = main_class.kate_generate_promt_channel( data_token_with_space , prefix , tmp, group_id_kate)
+                        print("prompt = ",len(prompt))
                 else:
                     if args.k > 0:
-                        demonstrations  = main_class.generate_setOfDemon_channel(tmp)
-                        prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
+                        if args.ensemble:
+                            prompt, label_ = main_class.kate_generate_promt_channel( data_token_with_space , prefix , tmp)
+                        else:
+                            demonstrations  = main_class.generate_setOfDemon_channel(tmp)
+                            prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
                     else: #zero shot case
                         assert not args.ensemble
+                        prefix = tokenizer((tmp % i))["input_ids"] 
                         prompt = [prefix for test_input in data_token_with_space]
-                        
-
-                tensor = prepro_sentence_pair(prompt , label_ensemble if args.ensemble else data_token_with_space , max_length,
+                
+                label1 = label_ if len(label_)!= 0 else data_token_with_space
+                assert len(prompt) == len(label1)
+                tensor = prepro_sentence_pair(prompt ,label1, max_length,
                                             bos_token_id, eos_token_id, method = "channel",
                                             allow_truncation=True)
                 input_tensors.append(tensor)
@@ -293,6 +317,7 @@ def main(args):
                 #                             bos_token_id, eos_token_id, method = "channel",
                 #                             allow_truncation=True)
                 #     input_tensors_calibration.append(tensor_calibrate)
+        
         for i in range(args.k +1):
             logging.info("Checking the first example...")
             input_ids = input_tensors[0]["input_ids"][i].numpy().tolist()
@@ -365,7 +390,7 @@ def main(args):
             logging.info(tokenizer.decode([_id for _id, _type_id in zip(input_ids, token_type_ids) if _type_id == 1]))
         
         losses = []
-        
+       
         for input_tensor in input_tensors:
                 loss_infer = inference(model,
                                         input_tensor,
@@ -382,14 +407,17 @@ def main(args):
                                         input_tensor,
                                         batch_size , args.k)
                 losses_calibration.append(loss_infer)
-            import copy
+            
+            if args.ensemble:
+                losses_calibration = flatten_label_losses(losses_calibration, test_inputs_token)
+            
             losses1 = copy.deepcopy(losses)
             for i, (bias_loss, loss) in enumerate(zip(losses_calibration, losses1)):
                 loss = np.array(loss)
                 bias_loss = np.array(bias_loss)
                 losses[i] = loss - bias_loss
             
-        print("loss len= ", len(losses))
+        #print("loss len= ", len(losses))
         acc = evaluate(test_inputs_with_label, {str(i): loss for i, loss in enumerate(losses)})
         accs.append(acc)
         logging.info(f"Acc = {acc}")
@@ -402,9 +430,9 @@ if __name__ == '__main__':
     parser.add_argument("--method", type=str, default="direct")
     parser.add_argument("--gpt2", type=str, default="gpt2-large")
     parser.add_argument("--ensemble", default=False, action="store_true")
-    parser.add_argument("--train_seed", type=int, default=99 , help="{13|21|42|87|100}")
-    parser.add_argument("--batch_size", type=int, default=32 )
-    parser.add_argument("--k", type=int, default=3)
+    parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
+    parser.add_argument("--batch_size", type=int, default=45 )
+    parser.add_argument("--k", type=int, default=2)
     parser.add_argument("--kate", action='store_true', help='enable kate' )
     parser.add_argument("--kate_metric", type=str, default="cosine"  ,help="euclidean or cosine" )
     parser.add_argument('--encoder_kate', default='roberta-base', type=str, help='roberta-base, roberta-large')

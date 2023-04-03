@@ -20,7 +20,9 @@ class SST2Processor():
         self.k = k
         dataset1 = load_dataset(self.dataset_name)
         self.train_split = dataset1["train"]
-        self.test_split = dataset1["test"]
+        
+        
+        self.test_split = dataset1["test"].select([0, 10, 20, 30, 40, 50])
         #self.val_split = dataset1["validation"]
         self.kate_metric = kate_metric
         self.reversed = reversedCosi
@@ -53,6 +55,7 @@ class SST2Processor():
             tokens_input = self.tokenizer(text)["input_ids"] 
             tokens_label = self.tokenizer(" " + (template % label_words[label]))["input_ids"] 
             demonstrations = demonstrations + tokens_input + tokens_label
+            #print("demonstrations = ",self.tokenizer.decode(demonstrations))
             #demonstrations_t = demonstrations_t+ text+ " " + (template % label_words[label])
             
         return demonstrations
@@ -65,7 +68,7 @@ class SST2Processor():
         train_id = self.train_id if len(group_id_kate) == 0 else group_id_kate
         #logging.info(f"{train_id}")
         few_train = [self.train_split[i] for i in train_id]
-        #logging.info("few_train = {}".format(len(few_train)))
+        logging.info("few_train = {}".format(few_train))
         
         for key in few_train:
             text = key['text'].strip()
@@ -212,7 +215,7 @@ class SST2Processor():
             c =c + 1
             # if c > 200:
             #     break
-        print("len train_split = " , c)
+        #print("len train_split = " , c)
         train_indices = list(range(len(train_text)))
         
         corpus = test_text + train_text
@@ -225,7 +228,7 @@ class SST2Processor():
 
         logging.info("n_dev = {} n_train = {} all corpus = {}".format(n_dev,n_train,len(corpus)))
         #print("emb_train = ", emb_train)
-        print("emb_train len= ", len(emb_train))
+        #print("emb_train len= ", len(emb_train))
         
         
         if self.kate_metric == "euclidean":
@@ -291,63 +294,115 @@ class SST2Processor():
                 
         return prompt , prompt_calibration
     
-    def ensemble_generate_promt(self, test_inputs_token , prefix , template):
+    def ensemble_generate_promt(self, test_inputs_token , prefix , template, group_id_kate = []):
         prompt = []
         prompt_calibration = []
         na_token = self.tokenizer("N/A")["input_ids"]
         label_words = ["terrible", "great"]
         
-        few_train = [self.train_split[i] for i in self.train_id]
-        for test_input in test_inputs_token:
-            for key in few_train:
-                text = key['text'].strip()
-                label = int(key['label'])
-                
-                if text[-1] != ".":
-                    text = text + " ."
-                            
-                tokens_input = self.tokenizer(text)["input_ids"] 
-                tokens_label = self.tokenizer(" " + (template % label_words[label]))["input_ids"] 
-                        
-                prompt1 = tokens_input + tokens_label + test_input + prefix
-                prompt2 = tokens_input + tokens_label + na_token + prefix
-                        
-                prompt.append(prompt1)
-                prompt_calibration.append(prompt2)
-            
-        return prompt , prompt_calibration
-    
-    
-    def kate_generate_promt_channel(self, group_id_kate , data_token_with_space , prefix , template):
+        #print(group_id_kate)
+        group_id_kate = group_id_kate  if len(group_id_kate) != 0 else [self.train_id]*len(test_inputs_token)
+        print(len(test_inputs_token))
+        print(len(group_id_kate))
+        assert len(test_inputs_token) == len(group_id_kate)
         
-        #prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
-        prompt = []
-        label_ensemble = []
-        label_words = ["terrible", "great"]
-        for test_input, group_id in zip(data_token_with_space, group_id_kate):
-            #print("group_id = ",group_id)
-            if self.ensemble:
+        if self.ensemble:
+            for test_input, group_id in zip(test_inputs_token, group_id_kate):
                 for g_id in group_id:
                     
                     few_train = self.train_split[g_id]
                     text = few_train['text'].strip()
                     label = int(few_train['label'])
-                        
+                    
                     if text[-1] != ".":
                         text = text + " ."
-                            
-                    p = (template % label_words[label])
-                    
+                                
                     tokens_input = self.tokenizer(text)["input_ids"] 
-                    tokens_label = self.tokenizer(p)["input_ids"] 
-                    prompt1 = tokens_label + tokens_input + prefix
+                    tokens_label = self.tokenizer(" " + (template % label_words[label]))["input_ids"] 
+                            
+                    prompt1 = tokens_input + tokens_label + test_input + prefix
+                    prompt2 = tokens_input + tokens_label + na_token + prefix
                     
-                    
+                    #print("prompt1 = ",self.tokenizer.decode(prompt1))
+                    #print("prompt2 = ",self.tokenizer.decode(prompt2))
                     prompt.append(prompt1)
-                    label_ensemble.append(test_input)
-            else:
+                    prompt_calibration.append(prompt2)
+            
+        return prompt , prompt_calibration
+    
+    
+    def kate_generate_promt_channel(self, data_token_with_space , prefix , template, group_id_kate = []):
+        
+        #prompt = [demonstrations.copy() + prefix for test_input in data_token_with_space]
+        prompt = []
+        label_ensemble = []
+        label_words = ["terrible", "great"]
+
+        group_id_kate = group_id_kate  if len(group_id_kate) != 0 else [self.train_id]*len(data_token_with_space)
+        # print("group_id_kate = ",group_id_kate)
+        # print("data_token_with_space = ",data_token_with_space)
+        assert len(group_id_kate) == len(data_token_with_space)
+        
+        if self.ensemble:
+            for test_input, group_id in zip(data_token_with_space, group_id_kate):
+                for g_id in group_id:
+                     #for g_id in group_id:
+
+                          few_train = self.train_split[g_id]
+                          text = few_train['text'].strip()
+                          label = int(few_train['label'])
+                          
+                          if text[-1] != ".":
+                              text = text + " ."
+
+                          p = (template % label_words[label])
+                          tokens_input = self.tokenizer(text)["input_ids"] 
+                          tokens_label = self.tokenizer(p)["input_ids"] 
+                          prompt1 = tokens_label + tokens_input + prefix
+                          
+                         #print("prompt1 = ",self.tokenizer.decode(prompt1))
+                         #print("label_ensemble = ",self.tokenizer.decode(test_input))
+                          prompt.append(prompt1)
+                          label_ensemble.append(test_input)
+            assert (len(self.test_split) * self.k ) == len(prompt) and  (len(self.test_split) * self.k ) == len(label_ensemble)
+        else:
+            for test_input, group_id in zip(data_token_with_space, group_id_kate):
                 demonstrations = self.generate_setOfDemon_channel(template , group_id)
                 prompt1 = demonstrations.copy() + prefix
-                
                 prompt.append(prompt1)
+                label_ensemble.append(test_input)
+            
+        
+        # else:
+        #       for test_input, group_id in zip(data_token_with_space, group_id_kate):
+        #           demonstrations = self.generate_setOfDemon_channel(template , group_id)
+        #           prompt1 = demonstrations.copy() + prefix
+
+
+        # for test_input, group_id in zip(data_token_with_space, group_id_kate):
+        #     print("group_id = ",group_id)
+        #     if self.ensemble:
+        #         for g_id in group_id:
+                    
+        #             few_train = self.train_split[g_id]
+        #             text = few_train['text'].strip()
+        #             label = int(few_train['label'])
+                        
+        #             if text[-1] != ".":
+        #                 text = text + " ."
+                            
+        #             p = (template % label_words[label])
+                    
+        #             tokens_input = self.tokenizer(text)["input_ids"] 
+        #             tokens_label = self.tokenizer(p)["input_ids"] 
+        #             prompt1 = tokens_label + tokens_input + prefix
+                    
+                    
+        #             prompt.append(prompt1)
+        #             label_ensemble.append(test_input)
+        #     else:
+        #         demonstrations = self.generate_setOfDemon_channel(template , group_id)
+        #         prompt1 = demonstrations.copy() + prefix
+                
+                #prompt.append(prompt1)
         return prompt , label_ensemble
