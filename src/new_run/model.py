@@ -144,8 +144,8 @@ class GPT2Wrapper:
 class LlamaWrapper:
     def initialize_model(cls, model_name):
         return LLaMAForCausalLM.from_pretrained("decapoda-research/llama-7b-hf",
-                                                # load_in_8bit=True,
-                                                # device_map="auto",
+                                                load_in_8bit=True,
+                                                device_map="auto",
                                                 )
     def __init__(
         self,
@@ -250,7 +250,7 @@ class LlamaWrapper:
             
             logits = logits_all[i, self.label_ids]
             
-            print("logits == ", logits)
+            #print("logits == ", logits)
             pred = logits.argmax(0)
             completion1 = self.labels[pred]
             completion.append(completion1)
