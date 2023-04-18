@@ -27,12 +27,27 @@ class BaseProcessor:
         logging.info(f"generating datasets using seed {seed}")
         print(self.dataset_name)
         self.train_id = random.sample(range(len(self.train_split)), k=self.k)
-        #self.test_id = random.sample(range(len(self.test_split)), k=500)
+        #self.test_id = random.sample(range(len(self.test_split)), k=2)
         
         self.train_dataset = [self.train_split[i] for i in self.train_id]
+        #self.test_dataset = [self.test_split[i] for i in self.test_id]
         self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
+    
+    def create_prompt(self, model_name):
         
-    def create_prompt(self):
+        if model_name =="llama":
+            self.labels = ["neg", "pos"]
+            
+            for t in self.train_dataset:
+                for key, value in t.items():
+                    if key == "label_text":
+                        t[key] = value[:3]
+                        
+            for t in self.test_dataset:
+                for key, value in t.items():
+                    if key == "label_text":
+                        t[key] = value[:3]
+                        
         prompts = []
         label_test = []
         prompt = self.prompt_start
@@ -50,7 +65,8 @@ class BaseProcessor:
         }
         self.model_kwargs.update(test_kwargs)
         
-        #print(prompts[0:2])
+        print(prompts[0])
+        print(prompts[1])
         return prompts
         
 class SST2Processor(BaseProcessor):

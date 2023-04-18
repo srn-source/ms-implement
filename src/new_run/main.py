@@ -44,7 +44,7 @@ def main(args):
     
     
     processor = PROCESSORS[args.dataset](args.train_seed, args.k)
-    prompts = processor.create_prompt()
+    prompts = processor.create_prompt(args.model_name)
     model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , **processor.model_kwargs)
     out_res = model_type.complete_all(prompts)
     #print(out_res)
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     parser.add_argument("--model_name", type=str, default="llama")
     parser.add_argument("--ensemble", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
-    parser.add_argument("--batch_size", type=int, default=1 )
+    parser.add_argument("--batch_size", type=int, default=12 )
     parser.add_argument("--k", type=int, default=4)
     parser.add_argument("--kate", action='store_true', help='enable kate' )
     parser.add_argument("--kate_metric", type=str, default="cosine"  ,help="euclidean or cosine" )
