@@ -1,5 +1,7 @@
 import argparse
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import T5Tokenizer, T5ForConditionalGeneration
+
 from data import  SST2Processor
 import random
 import torch
@@ -16,8 +18,6 @@ templates = ["A %s one . ", "It was %s . ",
                      "All in all %s . ", "A %s piece . "]
 templates_idx = [1,2,3,1]
 
-model = GPT2LMHeadModel.from_pretrained("gpt2-large")
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2-large")
 
 def seed_every_thing(train_seed):
     random.seed(train_seed)
@@ -65,9 +65,9 @@ def prepro_sentence_pair(train_inputs, test_inputs, max_length,
         for test_input in test_inputs:
             for train_input in train_inputs:
                 
-                print("train_input = ",tokenizer.decode(train_input))
-                print("test_input = ",tokenizer.decode(test_input))
-                print("+++++++++++++++++++++++++++++++++++++++++++++")
+                # print("train_input = ",tokenizer.decode(train_input))
+                # print("test_input = ",tokenizer.decode(test_input))
+                # print("+++++++++++++++++++++++++++++++++++++++++++++")
                 _input_ids, _attention_mask, _token_type_ids = \
                     prepro_sentence_pair_single(train_input, test_input, max_length,
                                                 bos_token_id, eos_token_id,
@@ -77,9 +77,9 @@ def prepro_sentence_pair(train_inputs, test_inputs, max_length,
                 token_type_ids.append(_token_type_ids)
     else:
         for input_ch , label_ch in zip(train_inputs, test_inputs):
-            print("train_input = ",tokenizer.decode(input_ch))
-            print("test_input = ",tokenizer.decode(label_ch))
-            print("+++++++++++++++++++++++++++++++++++++++++++++")
+            # print("train_input = ",tokenizer.decode(input_ch))
+            # print("test_input = ",tokenizer.decode(label_ch))
+            # print("+++++++++++++++++++++++++++++++++++++++++++++")
             _input_ids, _attention_mask, _token_type_ids = \
                     prepro_sentence_pair_single(input_ch, label_ch, max_length,
                                                 bos_token_id, eos_token_id,
@@ -148,6 +148,7 @@ def flatten_label_losses(label_losses, dev_data):
     print("label_losses [0][0] ========= ",label_losses[0][0])
     return label_losses
 
+@torch.no_grad()
 def run_model(model, input_ids, attention_mask, token_type_ids,
               labels=None, return_logits=False):
     #print("llll")
@@ -200,14 +201,24 @@ def evaluate(dev_data, label_losses):
 def main(args):
     
     seed_every_thing(args.train_seed)
-    #tokenizer = GPT2Tokenizer.from_pretrained(args.gpt2)
+    
+    model = GPT2LMHeadModel.from_pretrained(args.model_name)
+    tokenizer = GPT2Tokenizer.from_pretrained(args.model_name)
+    # if args.model_name =="t5-small":
+    #     model = T5ForConditionalGeneration.from_pretrained(args.model_name)
+    #     tokenizer = T5Tokenizer.from_pretrained(args.model_name)
+    # else:
+    #     model = GPT2LMHeadModel.from_pretrained(args.model_name)
+    #     tokenizer = GPT2Tokenizer.from_pretrained(args.model_name)
     
     for param in model.parameters():
         param.requires_grad = False
                     
-    max_length = 128
+    max_length = 256
     batch_size = args.batch_size
     
+    
+
     
     bos_token_id = tokenizer.bos_token_id
     eos_token_id = tokenizer.eos_token_id
@@ -426,13 +437,13 @@ def main(args):
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="SetFit/sst2" , help="SetFit/sst2 ,SetFit/SentEval-CR")
+    parser.add_argument("--dataset", type=str, default="rotten_tomatoes" , help="SetFit/sst2, rotten_tomatoes")
     parser.add_argument("--method", type=str, default="direct")
-    parser.add_argument("--gpt2", type=str, default="gpt2-large")
+    parser.add_argument("--model_name", type=str, default="gpt2-large")
     parser.add_argument("--ensemble", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
-    parser.add_argument("--batch_size", type=int, default=45 )
-    parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--batch_size", type=int, default=12 )
+    parser.add_argument("--k", type=int, default=8)
     parser.add_argument("--kate", action='store_true', help='enable kate' )
     parser.add_argument("--kate_metric", type=str, default="cosine"  ,help="euclidean or cosine" )
     parser.add_argument('--encoder_kate', default='roberta-base', type=str, help='roberta-base, roberta-large')

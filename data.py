@@ -22,7 +22,7 @@ class SST2Processor():
         self.train_split = dataset1["train"]
         
         
-        self.test_split = dataset1["test"].select([0, 10, 20, 30, 40, 50])
+        self.test_split = dataset1["test"]
         #self.val_split = dataset1["validation"]
         self.kate_metric = kate_metric
         self.reversed = reversedCosi
