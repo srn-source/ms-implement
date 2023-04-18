@@ -45,7 +45,7 @@ def main(args):
     
     
     
-    processor = PROCESSORS[args.dataset](args.train_seed, args.k , args.kate)
+    processor = PROCESSORS[args.dataset](args.train_seed, args.k , args.kate, args.kate_metric , args.reversed)
     prompts = processor.create_prompt(args.model_name)
     model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , **processor.model_kwargs)
     out_res = model_type.complete_all(prompts)
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     parser.add_argument("--batch_size", type=int, default=8 )
     parser.add_argument("--k", type=int, default=4)
     parser.add_argument("--kate", action='store_true', help='enable kate' )
-    parser.add_argument("--kate_metric", type=str, default="cosine"  ,help="euclidean or cosine" )
+    parser.add_argument("--kate_metric", type=str, default="euclidean"  ,help="euclidean or cosine" )
     parser.add_argument('--encoder_kate', default='roberta-base', type=str, help='roberta-base, roberta-large')
     parser.add_argument("--reversed", action='store_true', help='cosine kate reversed' )
     parser.add_argument("--use_calibration", default=False, action="store_true")

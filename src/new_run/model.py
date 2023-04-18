@@ -5,8 +5,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import logging
 import copy
 from typing import Dict, List, Optional
+import openai
 # from peft import PeftModel
 from transformers import LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
+
 from tqdm import tqdm
 
 logging.basicConfig(level = logging.INFO)
@@ -85,14 +87,15 @@ class GPT2Wrapper:
         #print("batch = ", batch)
         batch = to_device(batch, self.device)
         input_length = batch["input_ids"].shape[1]
-        output = self.model.generate(
-            **batch,
-            max_length=input_length + 1,
-            output_hidden_states=True,
-            output_scores =True,
-            do_sample =False,
-            return_dict_in_generate =True
-        )
+        with torch.no_grad():
+            output = self.model.generate(
+                **batch,
+                max_length=input_length + 1,
+                output_hidden_states=True,
+                output_scores =True,
+                do_sample =False,
+                return_dict_in_generate =True
+            )
         
         encoded = output.sequences
         # print("encoded old== ", encoded.shape)
@@ -122,7 +125,7 @@ class GPT2Wrapper:
         for i, prompt in enumerate(prompts):
             uncached.append((i, prompt))
             
-        for i in range(0, len(uncached), self.batch_size):
+        for i in tqdm(range(0, len(uncached), self.batch_size)):
             chunk = uncached[i : i + self.batch_size]
             # print("chunk = ",len(chunk))
             # print(chunk)
@@ -140,6 +143,10 @@ class GPT2Wrapper:
         print(np.mean(acc))
         
         return res
+    
+
+
+
 
 MODELS_hf = {
           "llama": "decapoda-research/llama-7b-hf",
@@ -151,6 +158,7 @@ class LlamaWrapper:
     def initialize_model(cls, model_name):
         return LLaMAForCausalLM.from_pretrained(model_name,
                                                 load_in_8bit=True,
+                                                torch_dtype=torch.float16,
                                                 device_map="auto",
                                                 )
     def __init__(
@@ -235,16 +243,18 @@ class LlamaWrapper:
         #print("batch = ", batch)
         batch = to_device(batch, self.device)
         input_length = batch["input_ids"].shape[1]
-        output = self.model.generate(
-            **batch,
-            max_new_tokens=1,
-            output_hidden_states=True,
-            generation_config=generation_config,
-            output_scores =True,
-            do_sample =False,
-            return_dict_in_generate =True
-        )
         
+        with torch.no_grad():
+            output = self.model.generate(
+                **batch,
+                max_new_tokens=1,
+                output_hidden_states=True,
+                generation_config=generation_config,
+                output_scores =True,
+                do_sample =False,
+                return_dict_in_generate =True
+            )
+            
         encoded = output.sequences
         # print("encoded old== ", encoded.shape)
         # print("encoded[:, input_length:] == ", encoded[:, input_length:].shape)
@@ -291,3 +301,4 @@ class LlamaWrapper:
         print(np.mean(acc))
         
         return res
+    

@@ -9,6 +9,7 @@ import copy
 from transformers import RobertaTokenizer, RobertaModel
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import pairwise
 
 logging.basicConfig(level = logging.INFO)
 
@@ -84,28 +85,29 @@ class BaseProcessor:
         emb_dev = X[:n_dev]
 
         logging.info("n_dev = {} n_train = {} all corpus = {}".format(n_dev,n_train,len(corpus)))
-        logging.info("Start NearestNeighbors...")
-        nbrs = NearestNeighbors(n_neighbors=self.k, algorithm='ball_tree', n_jobs=-1).fit(emb_train)
-        distances, indices = nbrs.kneighbors(emb_dev)
+        # logging.info("Start NearestNeighbors...")
+        # nbrs = NearestNeighbors(n_neighbors=(self.k), algorithm='ball_tree', n_jobs=-1).fit(emb_train)
+        # distances, indices = nbrs.kneighbors(emb_dev)
         
-        # if self.kate_metric == "euclidean":
-        #     logging.info("Start NearestNeighbors...")
-        #     nbrs = NearestNeighbors(n_neighbors=self.k, algorithm='ball_tree', n_jobs=-1).fit(emb_train)
-        #     distances, indices = nbrs.kneighbors(emb_dev)
-        # elif self.kate_metric == "cosine":
-        #     logging.info("Start cosine_similarity...")
-        #     dist_matrix = pairwise.cosine_similarity(X=emb_dev, Y=emb_train)
-        #     if self.reversed:
-        #         values, indices = torch.topk(-torch.from_numpy(dist_matrix), k=self.k, dim=-1)
-        #     else:
-        #         values, indices = torch.topk(torch.from_numpy(dist_matrix), k=self.k, dim=-1)
-        #     indices = indices.numpy()
+        if self.kate_metric == "euclidean":
+            logging.info("Start NearestNeighbors...")
+            nbrs = NearestNeighbors(n_neighbors=self.k, algorithm='ball_tree', n_jobs=-1).fit(emb_train)
+            distances, indices = nbrs.kneighbors(emb_dev)
+        elif self.kate_metric == "cosine":
+            logging.info("Start cosine_similarity...")
+            dist_matrix = pairwise.cosine_similarity(X=emb_dev, Y=emb_train)
+            if self.reversed:
+                values, indices = torch.topk(-torch.from_numpy(dist_matrix), k=self.k, dim=-1)
+            else:
+                values, indices = torch.topk(torch.from_numpy(dist_matrix), k=self.k, dim=-1)
+            indices = indices.numpy()
         
         train_indices_np = np.asarray(train_indices)
         #print(train_indices_np)
         kNN_dev_train = [train_indices_np[indices[i]].reshape(1, -1) for i in range(len(indices))]
         #print(kNN_dev_train)
         kNN_dev_train = np.concatenate(kNN_dev_train, axis=0).tolist()
+        
         return kNN_dev_train
     
     def generate_datasets(self, seed: int):
@@ -174,10 +176,12 @@ class BaseProcessor:
         return prompts
         
 class SST2Processor(BaseProcessor):
-    def __init__(self, seed: int = 87 , k: int = 4 , kate: bool = False) :
+    def __init__(self, seed: int = 87 , k: int = 4 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False) :
         
         self.k = k
         self.kate = kate
+        self.kate_metric = kate_metric
+        self.reversed = reversed
         self.dataset_name = "SetFit/sst2"
         self.prompt_start = "Below is couple of movie reviews and their corresponding sentiments. Write a sentiment that appropriately completes the request.\n\n"
         self.train_template = "Review: {text}\n" "Sentiment: {label_text}\n\n"
