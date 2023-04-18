@@ -24,7 +24,9 @@ PROCESSORS = {
 MODELS = {"gpt2": GPT2Wrapper,
           "gpt2-medium": GPT2Wrapper,
           "gpt2-large": GPT2Wrapper,
-          "llama": LlamaWrapper
+          "llama": LlamaWrapper,
+          "alpaca": LlamaWrapper,
+          "alpaca-lora": LlamaWrapper,
           }
 
 
@@ -57,7 +59,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="sst2" , help="SetFit/sst2, rotten_tomatoes")
     parser.add_argument("--method", type=str, default="direct")
-    parser.add_argument("--model_name", type=str, default="llama")
+    parser.add_argument("--model_name", type=str, default="llama" , help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}")
     parser.add_argument("--ensemble", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
     parser.add_argument("--batch_size", type=int, default=8 )

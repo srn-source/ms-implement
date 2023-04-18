@@ -7,7 +7,7 @@ import copy
 from typing import Dict, List, Optional
 # from peft import PeftModel
 from transformers import LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
-
+from tqdm import tqdm
 
 logging.basicConfig(level = logging.INFO)
 
@@ -140,10 +140,15 @@ class GPT2Wrapper:
         print(np.mean(acc))
         
         return res
-    
+
+MODELS_hf = {
+          "llama": "decapoda-research/llama-7b-hf",
+          "alpaca": "chavinlo/alpaca-native",
+          "alpaca-lora": "chainyo/alpaca-lora-7b",
+          }
 class LlamaWrapper:
     def initialize_model(cls, model_name):
-        return LLaMAForCausalLM.from_pretrained("decapoda-research/llama-7b-hf",
+        return LLaMAForCausalLM.from_pretrained(model_name,
                                                 load_in_8bit=True,
                                                 device_map="auto",
                                                 )
@@ -164,8 +169,12 @@ class LlamaWrapper:
         self.batch_size = batch_size
         #self.calibrate = calibrate
         logging.info(f"Setting batch_size={batch_size}")
-        self.tokenizer = LLaMATokenizer.from_pretrained("decapoda-research/llama-7b-hf")
+        model_hf = MODELS_hf[model_name]
+        
+        
+        self.tokenizer = LLaMATokenizer.from_pretrained(model_hf)
         self.tokenizer.padding_side = "left"
+        self.tokenizer.add_bos_token = False
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         
@@ -173,7 +182,7 @@ class LlamaWrapper:
         
         logging.info(f"Initializing {model_name}")
         self.model_name = model_name
-        self.model = self.initialize_model(model_name)
+        self.model = self.initialize_model(model_hf)
         self.model.config.pad_token_id = self.model.config.eos_token_id
         
         for param in self.model.parameters():
@@ -191,7 +200,7 @@ class LlamaWrapper:
             ):
                 print(label)
                 print(label_encoded)
-                label_id = label_encoded[1]
+                label_id = label_encoded[0]
                 label_str = self.tokenizer.convert_ids_to_tokens(label_id)
                 if len(label_encoded) > 1:
                     logging.warning(
@@ -263,7 +272,7 @@ class LlamaWrapper:
         for i, prompt in enumerate(prompts):
             uncached.append((i, prompt))
             
-        for i in range(0, len(uncached), self.batch_size):
+        for i in tqdm(range(0, len(uncached), self.batch_size)):
             chunk = uncached[i : i + self.batch_size]
             # print("chunk = ",len(chunk))
             # print(chunk)
@@ -276,7 +285,7 @@ class LlamaWrapper:
         acc=[]
         for pred,label_test in zip(res,self.label_test):
             print(f"{str(pred)} , {str(label_test)}")
-            acc.append(str(pred)==str(label_test))
+            acc.append(str(pred.strip())==str(label_test.strip()))
         
         print(np.mean(acc))
         

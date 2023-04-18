@@ -35,18 +35,18 @@ class BaseProcessor:
     
     def create_prompt(self, model_name):
         
-        if model_name =="llama":
-            self.labels = ["neg", "pos"]
+        # if model_name =="llama":
+        #     self.labels = ["neg", "pos"]
             
-            for t in self.train_dataset:
-                for key, value in t.items():
-                    if key == "label_text":
-                        t[key] = value[:3]
+        #     for t in self.train_dataset:
+        #         for key, value in t.items():
+        #             if key == "label_text":
+        #                 t[key] = value[:3]
                         
-            for t in self.test_dataset:
-                for key, value in t.items():
-                    if key == "label_text":
-                        t[key] = value[:3]
+        #     for t in self.test_dataset:
+        #         for key, value in t.items():
+        #             if key == "label_text":
+        #                 t[key] = value[:3]
                         
         prompts = []
         label_test = []
@@ -58,7 +58,8 @@ class BaseProcessor:
         for data_test in self.test_dataset:
             prompts.append(prompt + self.eval_template.format(**data_test))
             label_test.append(data_test["label_text"].strip())
-        
+                
+                
         test_kwargs = {
            "labels": self.labels,
             "label_test": label_test,
@@ -66,6 +67,7 @@ class BaseProcessor:
         self.model_kwargs.update(test_kwargs)
         
         print(prompts[0])
+        print("==============================")
         print(prompts[1])
         return prompts
         
