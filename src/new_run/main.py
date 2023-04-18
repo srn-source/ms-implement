@@ -45,7 +45,7 @@ def main(args):
     
     
     
-    processor = PROCESSORS[args.dataset](args.train_seed, args.k)
+    processor = PROCESSORS[args.dataset](args.train_seed, args.k , args.kate)
     prompts = processor.create_prompt(args.model_name)
     model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , **processor.model_kwargs)
     out_res = model_type.complete_all(prompts)

@@ -146,6 +146,7 @@ MODELS_hf = {
           "alpaca": "chavinlo/alpaca-native",
           "alpaca-lora": "chainyo/alpaca-lora-7b",
           }
+
 class LlamaWrapper:
     def initialize_model(cls, model_name):
         return LLaMAForCausalLM.from_pretrained(model_name,
