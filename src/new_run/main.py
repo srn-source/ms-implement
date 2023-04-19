@@ -51,7 +51,7 @@ def main(args):
     
     processor = PROCESSORS[args.dataset](args.train_seed, args.k , args.kate, args.kate_metric , args.reversed)
     prompts, prompts_cali , prompts_cali2 , prompts_cali3= processor.create_prompt(args.model_name)
-    model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , args.use_calibration, **processor.model_kwargs)
+    model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , args.kate, args.use_calibration, **processor.model_kwargs)
     out_res = model_type.complete_all(prompts , prompts_cali,prompts_cali2 , prompts_cali3)
     #print(out_res)
     # if "gpt2" in args.model_name:

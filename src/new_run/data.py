@@ -145,7 +145,7 @@ class BaseProcessor:
         #self.test_id = random.sample(range(len(self.test_split)), k=2)
         
         self.train_dataset = [self.train_split[i] for i in self.train_id]
-        random.shuffle(self.train_dataset)
+        #random.shuffle(self.train_dataset)
         #self.test_dataset = [self.test_split[i] for i in self.test_id]
         self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
     

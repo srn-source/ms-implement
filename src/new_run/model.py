@@ -44,6 +44,7 @@ class GPT2Wrapper:
         
         batch_size: int = 8,
         k: int = 4,
+        kate: bool = False,
         use_calibration: bool = False,
         labels: List[str] = None,
         label_test: List[str] = None,
@@ -62,7 +63,7 @@ class GPT2Wrapper:
         self.tokenizer.padding_side = "left"
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.label_test = label_test
-
+        self.kate = kate
         
         
         logging.info(f"Initializing {model_name}")
@@ -101,8 +102,8 @@ class GPT2Wrapper:
         batch = self.tokenizer.batch_encode_plus(
             prompts, return_tensors="pt", padding=True
         )
-        logging.info(batch[0].ids)
-        logging.info(self.tokenizer.decode(batch[0].ids , skip_special_tokens=True) )
+        # logging.info(batch[0].ids)
+        # logging.info(self.tokenizer.decode(batch[0].ids , skip_special_tokens=True) )
 
         
         if batch["input_ids"].shape[1] > self.tokenizer.max_len_single_sentence:
@@ -142,7 +143,8 @@ class GPT2Wrapper:
             #print("self.label_ids == ", self.label_ids)
             
             logits = logits_all[i, self.label_ids]
-            probs= F.softmax(logits, dim=0)
+            #print("logits = ",logits)
+            probs= F.softmax(logits.detach().cpu(), dim=0)
             #print("logits == ", logits)
             pred = logits.argmax(0)
             completion1 = self.labels[pred]
@@ -152,23 +154,32 @@ class GPT2Wrapper:
         return completion , probs_arr
     
     def complete_all_cali(self , prompts):
-        res = [None] * len(prompts)
-        probs = [None] * len(prompts)
+        # res = [None] * len(prompts)
+        # probs = [None] * len(prompts)
         
-        uncached = []
-        for i, prompt in enumerate(prompts):
-            uncached.append((i, prompt))
+        # print("res = ",res)
+        # print("probs = ",probs)
+        outputs , probs_arr = self.complete([prompts])
+        print("outputs = ",outputs)
+        print("probs_arr = ",probs_arr)
+        # for output , probs_array in zip(outputs , probs_arr):
+        #     res[j] = output.strip()
+        #     probs[j] = probs_array
+                
+        # uncached = []
+        # for i, prompt in enumerate(prompts):
+        #     uncached.append((i, prompt))
             
-        for i in tqdm(range(0, len(uncached), self.batch_size)):
-            chunk = uncached[i : i + self.batch_size]
-            # print("chunk = ",len(chunk))
-            # print(chunk)
-            chunk_prompts = [tup[1] for tup in chunk]
-            outputs , probs_arr = self.complete(chunk_prompts)
-            for (j, prompt), output , probs_array in zip(chunk, outputs , probs_arr):
-                res[j] = output.strip()
-                probs[j] = probs_array
-        return res , probs
+        # for i in tqdm(range(0, len(uncached), self.batch_size)):
+        #     chunk = uncached[i : i + self.batch_size]
+        #     # print("chunk = ",len(chunk))
+        #     # print(chunk)
+        #     chunk_prompts = [tup[1] for tup in chunk]
+        #     outputs , probs_arr = self.complete(chunk_prompts)
+        #     for (j, prompt), output , probs_array in zip(chunk, outputs , probs_arr):
+        #         res[j] = output.strip()
+        #         probs[j] = probs_array
+        return outputs , probs_arr
     
     def complete_all(self, prompts , prompts_cali , prompts_cali2 , prompts_cali3):
         res = [None] * len(prompts)
@@ -193,27 +204,33 @@ class GPT2Wrapper:
         
         #print("probs == ",probs)
         
-        
-        
-        
         if self.use_calibration:
-            res_cali , probs_cali = self.complete_all_cali(prompts_cali)
-            res_cali2 , probs_cali2 = self.complete_all_cali(prompts_cali2)
-            res_cali3 , probs_cali3 = self.complete_all_cali(prompts_cali3)
+            assert self.kate == False
+            print("prompts_cali[0] = ",prompts_cali[0])
+            print("prompts_cali2[0] = ",prompts_cali2[0])
+            print("prompts_cali3[0] = ",prompts_cali3[0])
+            res_cali , probs_cali = self.complete_all_cali(prompts_cali[0])
+            res_cali2 , probs_cali2 = self.complete_all_cali(prompts_cali2[0])
+            res_cali3 , probs_cali3 = self.complete_all_cali(prompts_cali3[0])
             res = [None] * len(prompts)
             
-            
-            for j , (p_ori , p_cali , p_cali2 ,p_cali3) in enumerate(zip(probs , probs_cali , probs_cali2 , probs_cali3)):
+            print(probs_cali)
+            print(probs_cali2)
+            print(probs_cali3)
+            raw_cali_probs = torch.stack([probs_cali[0] , probs_cali2[0], probs_cali3[0]])
+            W = 1.0 / raw_cali_probs.mean(dim=0)
+            #W = 1.0 / probs_cali[0]
+            print("raw_cali_probs" , raw_cali_probs)
+            print("W" , W)
+            for j , p_ori in enumerate(probs):
                 
                 # print(p_cali[0], p_cali2[0],p_cali3[0])
                 
-                raw_cali_probs = torch.stack([p_cali[0] , p_cali2[0], p_cali3[0]])
-                
                 #print("raw_cali_probs ==== ",raw_cali_probs)
-                W = 1.0 / raw_cali_probs.mean(dim=0)
-                #print("W ==== ",W)
-                #print("p_ori ====== ",p_ori[0])
-                p_new = p_ori[0] * W
+                
+                #print("p_ori ==== ",p_ori)
+                #print("p_ori[0] ====== ",p_ori[0])
+                p_new = p_ori * W
                 #print("p_new ==== ",p_new)
                 p_new = p_new / p_new.sum()
                 #print("p_new ==== ",p_new)
@@ -221,11 +238,33 @@ class GPT2Wrapper:
                 
                 
                 pred1 = p_new.argmax(0)
+                #print("pred1 ==== ",pred1)
                 res[j] = self.labels[pred1].strip()
+                #print("res[j] ==== ",self.labels[pred1].strip())
+                
+            # for j , (p_ori , p_cali , p_cali2 ,p_cali3) in enumerate(zip(probs , probs_cali , probs_cali2 , probs_cali3)):
+                
+            #     # print(p_cali[0], p_cali2[0],p_cali3[0])
+                
+            #     raw_cali_probs = torch.stack([p_cali[0] , p_cali2[0], p_cali3[0]])
+                
+            #     #print("raw_cali_probs ==== ",raw_cali_probs)
+            #     W = 1.0 / raw_cali_probs.mean(dim=0)
+            #     #print("W ==== ",W)
+            #     #print("p_ori ====== ",p_ori[0])
+            #     p_new = p_ori[0] * W
+            #     #print("p_new ==== ",p_new)
+            #     p_new = p_new / p_new.sum()
+            #     #print("p_new ==== ",p_new)
+            #     # p_new = p_ori[0] - p_cali[0]
+                
+                
+            #     pred1 = p_new.argmax(0)
+            #     res[j] = self.labels[pred1].strip()
             
         acc=[]
         for pred,label_test in zip(res,self.label_test):
-            print(f"{str(pred)} , {str(label_test)}")
+            #print(f"{str(pred)} , {str(label_test)}")
             acc.append(str(pred)==str(label_test))
         
         print(np.mean(acc))
@@ -255,6 +294,7 @@ class LlamaWrapper:
         
         batch_size: int = 8,
         k: int = 4,
+        kate: bool = False,
         use_calibration: bool = False,
         labels: List[str] = None,
         label_test: List[str] = None,
@@ -275,7 +315,7 @@ class LlamaWrapper:
         self.tokenizer.add_bos_token = False
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
-        
+        self.kate = kate
         self.label_test = label_test
         
         logging.info(f"Initializing {model_name}")
@@ -316,8 +356,8 @@ class LlamaWrapper:
             prompts, return_tensors="pt", padding=True
         )
 
-        logging.info(batch[0].ids)
-        logging.info(self.tokenizer.decode(batch[0].ids , skip_special_tokens=True) )
+        # logging.info(batch[0].ids)
+        # logging.info(self.tokenizer.decode(batch[0].ids , skip_special_tokens=True) )
 
         if batch["input_ids"].shape[1] > self.tokenizer.max_len_single_sentence:
             prompt_length = batch["input_ids"].shape[1]
@@ -372,7 +412,36 @@ class LlamaWrapper:
         
         return completion , probs_arr
     
+    
     def complete_all_cali(self , prompts):
+        # res = [None] * len(prompts)
+        # probs = [None] * len(prompts)
+        
+        # print("res = ",res)
+        # print("probs = ",probs)
+        outputs , probs_arr = self.complete([prompts])
+        print("outputs = ",outputs)
+        print("probs_arr = ",probs_arr)
+        # for output , probs_array in zip(outputs , probs_arr):
+        #     res[j] = output.strip()
+        #     probs[j] = probs_array
+                
+        # uncached = []
+        # for i, prompt in enumerate(prompts):
+        #     uncached.append((i, prompt))
+            
+        # for i in tqdm(range(0, len(uncached), self.batch_size)):
+        #     chunk = uncached[i : i + self.batch_size]
+        #     # print("chunk = ",len(chunk))
+        #     # print(chunk)
+        #     chunk_prompts = [tup[1] for tup in chunk]
+        #     outputs , probs_arr = self.complete(chunk_prompts)
+        #     for (j, prompt), output , probs_array in zip(chunk, outputs , probs_arr):
+        #         res[j] = output.strip()
+        #         probs[j] = probs_array
+        return outputs , probs_arr
+    
+    def complete_all(self, prompts , prompts_cali , prompts_cali2 , prompts_cali3):
         res = [None] * len(prompts)
         probs = [None] * len(prompts)
         
@@ -389,44 +458,39 @@ class LlamaWrapper:
             for (j, prompt), output , probs_array in zip(chunk, outputs , probs_arr):
                 res[j] = output.strip()
                 probs[j] = probs_array
-        return res , probs
-    
-    def complete_all(self, prompts):
-        res = [None] * len(prompts)
-        probs = [None] * len(prompts)
-        uncached = []
-        
-        for i, prompt in enumerate(prompts):
-            uncached.append((i, prompt))
+            # print("probs_arr == ",probs_arr)
+            # print(llllllllllllllllllllllllllllllll)
             
-        for i in tqdm(range(0, len(uncached), self.batch_size)):
-            chunk = uncached[i : i + self.batch_size]
-            # print("chunk = ",len(chunk))
-            # print(chunk)
-            chunk_prompts = [tup[1] for tup in chunk]
-            outputs , probs_arr = self.complete(chunk_prompts)
-            for (j, prompt), output , probs_arr in zip(chunk, outputs , probs_arr):
-                res[j] = output.strip()
-                probs[j] = probs_array
+        
+        #print("probs == ",probs)
         
         if self.use_calibration:
-            res_cali , probs_cali = self.complete_all_cali(prompts_cali)
-            res_cali2 , probs_cali2 = self.complete_all_cali(prompts_cali2)
-            res_cali3 , probs_cali3 = self.complete_all_cali(prompts_cali3)
+            assert self.kate == False
+            print("prompts_cali[0] = ",prompts_cali[0])
+            print("prompts_cali2[0] = ",prompts_cali2[0])
+            print("prompts_cali3[0] = ",prompts_cali3[0])
+            res_cali , probs_cali = self.complete_all_cali(prompts_cali[0])
+            res_cali2 , probs_cali2 = self.complete_all_cali(prompts_cali2[0])
+            res_cali3 , probs_cali3 = self.complete_all_cali(prompts_cali3[0])
             res = [None] * len(prompts)
             
-            
-            for j , (p_ori , p_cali , p_cali2 ,p_cali3) in enumerate(zip(probs , probs_cali , probs_cali2 , probs_cali3)):
+            print(probs_cali)
+            print(probs_cali2)
+            print(probs_cali3)
+            raw_cali_probs = torch.stack([probs_cali[0] , probs_cali2[0], probs_cali3[0]])
+            W = 1.0 / raw_cali_probs.mean(dim=0)
+            #W = 1.0 / probs_cali[0]
+            print("raw_cali_probs" , raw_cali_probs)
+            print("W" , W)
+            for j , p_ori in enumerate(probs):
                 
                 # print(p_cali[0], p_cali2[0],p_cali3[0])
                 
-                raw_cali_probs = torch.stack([p_cali[0] , p_cali2[0], p_cali3[0]])
-                
                 #print("raw_cali_probs ==== ",raw_cali_probs)
-                W = 1.0 / raw_cali_probs.mean(dim=0)
-                #print("W ==== ",W)
-                #print("p_ori ====== ",p_ori[0])
-                p_new = p_ori[0] * W
+                
+                #print("p_ori ==== ",p_ori)
+                #print("p_ori[0] ====== ",p_ori[0])
+                p_new = p_ori * W
                 #print("p_new ==== ",p_new)
                 p_new = p_new / p_new.sum()
                 #print("p_new ==== ",p_new)
@@ -434,7 +498,29 @@ class LlamaWrapper:
                 
                 
                 pred1 = p_new.argmax(0)
+                #print("pred1 ==== ",pred1)
                 res[j] = self.labels[pred1].strip()
+                #print("res[j] ==== ",self.labels[pred1].strip())
+                
+            # for j , (p_ori , p_cali , p_cali2 ,p_cali3) in enumerate(zip(probs , probs_cali , probs_cali2 , probs_cali3)):
+                
+            #     # print(p_cali[0], p_cali2[0],p_cali3[0])
+                
+            #     raw_cali_probs = torch.stack([p_cali[0] , p_cali2[0], p_cali3[0]])
+                
+            #     #print("raw_cali_probs ==== ",raw_cali_probs)
+            #     W = 1.0 / raw_cali_probs.mean(dim=0)
+            #     #print("W ==== ",W)
+            #     #print("p_ori ====== ",p_ori[0])
+            #     p_new = p_ori[0] * W
+            #     #print("p_new ==== ",p_new)
+            #     p_new = p_new / p_new.sum()
+            #     #print("p_new ==== ",p_new)
+            #     # p_new = p_ori[0] - p_cali[0]
+                
+                
+            #     pred1 = p_new.argmax(0)
+            #     res[j] = self.labels[pred1].strip()
             
         acc=[]
         for pred,label_test in zip(res,self.label_test):
