@@ -27,6 +27,10 @@ MODELS = {"gpt2": GPT2Wrapper,
           "llama": LlamaWrapper,
           "alpaca": LlamaWrapper,
           "alpaca-lora": LlamaWrapper,
+          "gpt_j6b": GPT2Wrapper,
+          "gpt4all_j": GPT2Wrapper,
+          #"gpt4all_lora": GPT2Wrapper,
+          "dolly_v2_7b": GPT2Wrapper
           }
 
 
@@ -46,9 +50,9 @@ def main(args):
     
     
     processor = PROCESSORS[args.dataset](args.train_seed, args.k , args.kate, args.kate_metric , args.reversed)
-    prompts = processor.create_prompt(args.model_name)
-    model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , **processor.model_kwargs)
-    out_res = model_type.complete_all(prompts)
+    prompts, prompts_cali , prompts_cali2 , prompts_cali3= processor.create_prompt(args.model_name)
+    model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , args.use_calibration, **processor.model_kwargs)
+    out_res = model_type.complete_all(prompts , prompts_cali,prompts_cali2 , prompts_cali3)
     #print(out_res)
     # if "gpt2" in args.model_name:
     #     init_model = GPT2Wrapper(args.model_name , args.batch_size, args.k)
@@ -59,10 +63,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="sst2" , help="SetFit/sst2, rotten_tomatoes")
     parser.add_argument("--method", type=str, default="direct")
-    parser.add_argument("--model_name", type=str, default="llama" , help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}")
+    parser.add_argument("--model_name", type=str, default="gpt2" , help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}")
     parser.add_argument("--ensemble", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
-    parser.add_argument("--batch_size", type=int, default=8 )
+    parser.add_argument("--batch_size", type=int, default=16 )
     parser.add_argument("--k", type=int, default=4)
     parser.add_argument("--kate", action='store_true', help='enable kate' )
     parser.add_argument("--kate_metric", type=str, default="euclidean"  ,help="euclidean or cosine" )

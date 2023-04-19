@@ -32,7 +32,13 @@ class BaseProcessor:
     def chunks(self, lst, n):
         """Yield successive n-sized chunks from lst."""
         return [lst[i:i + n] for i in range(0, len(lst), n)]
-
+    @property
+    def calibration_examples(self):
+        return [
+            {"text": "N/A"},
+            # {"text": "[MASK]"},
+            # {"text": ""},
+        ]
     def decode(self, tok, model, corpus ):
         embeddings = []
         
@@ -89,18 +95,39 @@ class BaseProcessor:
         # nbrs = NearestNeighbors(n_neighbors=(self.k), algorithm='ball_tree', n_jobs=-1).fit(emb_train)
         # distances, indices = nbrs.kneighbors(emb_dev)
         
+        
         if self.kate_metric == "euclidean":
             logging.info("Start NearestNeighbors...")
             nbrs = NearestNeighbors(n_neighbors=self.k, algorithm='ball_tree', n_jobs=-1).fit(emb_train)
             distances, indices = nbrs.kneighbors(emb_dev)
+            
+            # nbrs1 = NearestNeighbors(n_neighbors=self.k, algorithm='ball_tree', n_jobs=-1).fit(emb_train)
+            # distances1, indices1 = nbrs.kneighbors(emb_dev)
+            
         elif self.kate_metric == "cosine":
             logging.info("Start cosine_similarity...")
             dist_matrix = pairwise.cosine_similarity(X=emb_dev, Y=emb_train)
             if self.reversed:
                 values, indices = torch.topk(-torch.from_numpy(dist_matrix), k=self.k, dim=-1)
+                values_t, indices_t = torch.topk(torch.from_numpy(dist_matrix), k=self.k, dim=-1)
+                print("values == ",values)
+                print("indices == ",indices)
+                print("values_t == ",values_t)
+                print("indices_t == ",indices_t)
             else:
                 values, indices = torch.topk(torch.from_numpy(dist_matrix), k=self.k, dim=-1)
+                print("values == ",values)
             indices = indices.numpy()
+        
+        # gggg = []
+        # for h in indices:
+        #     print("h = ",h)
+        #     gggg1 = []
+        #     for j in h:
+        #         gggg1.append(train_label[j])
+        #     gggg.append(gggg1)
+        # print("gggg = ",gggg)
+        
         
         train_indices_np = np.asarray(train_indices)
         #print(train_indices_np)
@@ -118,6 +145,7 @@ class BaseProcessor:
         #self.test_id = random.sample(range(len(self.test_split)), k=2)
         
         self.train_dataset = [self.train_split[i] for i in self.train_id]
+        random.shuffle(self.train_dataset)
         #self.test_dataset = [self.test_split[i] for i in self.test_id]
         self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
     
@@ -137,14 +165,25 @@ class BaseProcessor:
         #                 t[key] = value[:3]
         
         prompts = []
+        prompts_cali = []
+        prompts_cali2 = []
+        prompts_cali3 = []
+        
         label_test = []
         prompt = self.prompt_start
+        cali = {"text": "N/A"}
+        cali2 = {"text": "[MASK]"}
+        cali3 = {"text": ""}
         
         if self.kate:
             list_train_ids = self.kate_process()
             
             for data_example , data_test in zip(list_train_ids , self.test_dataset):
                 prompt = self.prompt_start
+                
+                # print("before shuffle = " , data_example)
+                # random.shuffle(data_example)
+                # print("after shuffle = " , data_example)
                 
                 train_dataset_info = [self.train_split[i] for i in data_example]
                 
@@ -153,27 +192,41 @@ class BaseProcessor:
                     prompt = prompt + self.train_template.format(**data_example_in)
                     
                 prompts.append(prompt + self.eval_template.format(**data_test))
+                prompts_cali.append(prompt + self.eval_template.format(**cali))
+                prompts_cali2.append(prompt + self.eval_template.format(**cali2))
+                prompts_cali3.append(prompt + self.eval_template.format(**cali3))
                 label_test.append(data_test["label_text"].strip())
-                
-        else:
+
             
+        else:
+            # print("before shuffle = " , self.train_dataset)
+            # random.shuffle(self.train_dataset)
+            # print("after shuffle = " , self.train_dataset)
             for data_example in self.train_dataset:
                 prompt = prompt + self.train_template.format(**data_example)
             for data_test in self.test_dataset:
                 prompts.append(prompt + self.eval_template.format(**data_test))
+                
+                prompts_cali.append(prompt + self.eval_template.format(**cali))
+                prompts_cali2.append(prompt + self.eval_template.format(**cali2))
+                prompts_cali3.append(prompt + self.eval_template.format(**cali3))
+                
                 label_test.append(data_test["label_text"].strip())
+                
                 
                 
         test_kwargs = {
            "labels": self.labels,
-            "label_test": label_test,
+           "label_test": label_test,
         }
         self.model_kwargs.update(test_kwargs)
         
+        print(prompts_cali[0])
+        print("==============================")
         print(prompts[0])
         print("==============================")
-        print(prompts[1])
-        return prompts
+       
+        return prompts , prompts_cali , prompts_cali2 , prompts_cali3
         
 class SST2Processor(BaseProcessor):
     def __init__(self, seed: int = 87 , k: int = 4 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False) :
@@ -190,3 +243,4 @@ class SST2Processor(BaseProcessor):
         self.labels = ["negative", "positive"]
         self.model_kwargs = {"labels": self.labels }
         self.generate_datasets(seed)
+        
