@@ -67,7 +67,7 @@ if __name__ == '__main__':
     parser.add_argument("--ensemble", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
     parser.add_argument("--batch_size", type=int, default=16 )
-    parser.add_argument("--k", type=int, default=4)
+    parser.add_argument("--k", type=int, default=8)
     parser.add_argument("--kate", action='store_true', help='enable kate' )
     parser.add_argument("--kate_metric", type=str, default="euclidean"  ,help="euclidean or cosine" )
     parser.add_argument('--encoder_kate', default='roberta-base', type=str, help='roberta-base, roberta-large')

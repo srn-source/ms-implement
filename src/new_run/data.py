@@ -10,6 +10,8 @@ from transformers import RobertaTokenizer, RobertaModel
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import pairwise
+from datasets import load_dataset, Dataset, DatasetDict
+from sklearn.model_selection import train_test_split
 
 logging.basicConfig(level = logging.INFO)
 
@@ -32,13 +34,7 @@ class BaseProcessor:
     def chunks(self, lst, n):
         """Yield successive n-sized chunks from lst."""
         return [lst[i:i + n] for i in range(0, len(lst), n)]
-    @property
-    def calibration_examples(self):
-        return [
-            {"text": "N/A"},
-            # {"text": "[MASK]"},
-            # {"text": ""},
-        ]
+    
     def decode(self, tok, model, corpus ):
         embeddings = []
         
@@ -110,10 +106,10 @@ class BaseProcessor:
             if self.reversed:
                 values, indices = torch.topk(-torch.from_numpy(dist_matrix), k=self.k, dim=-1)
                 values_t, indices_t = torch.topk(torch.from_numpy(dist_matrix), k=self.k, dim=-1)
-                print("values == ",values)
-                print("indices == ",indices)
-                print("values_t == ",values_t)
-                print("indices_t == ",indices_t)
+                # print("values == ",values)
+                # print("indices == ",indices)
+                # print("values_t == ",values_t)
+                # print("indices_t == ",indices_t)
             else:
                 values, indices = torch.topk(torch.from_numpy(dist_matrix), k=self.k, dim=-1)
                 print("values == ",values)
@@ -141,13 +137,25 @@ class BaseProcessor:
         logging.info(f"generating datasets using seed {seed}")
         print(self.dataset_name)
         
-        self.train_id = random.sample(range(len(self.train_split)), k=self.k)
-        #self.test_id = random.sample(range(len(self.test_split)), k=2)
         
-        self.train_dataset = [self.train_split[i] for i in self.train_id]
+        #self.train_id = random.sample(range(len(self.train_split)), k=self.k)
+        
+        #self.train_dataset = [self.train_split[i] for i in self.train_id]
+        #sp = self.train_split.train_test_split(test_size=self.k, shuffle = True, seed=self.seed , stratify_by_column="label_text",)
+
+        #self.train_dataset = sp["test"]
+        
+        
+        #dataset = load_dataset("my_dataset")
+        # for balance dataset
+        train_dataset1, test_dataset1 = train_test_split(self.train_split, test_size=self.k,shuffle = True, random_state=self.seed , stratify=self.train_split["label"])
+        self.train_dataset = Dataset.from_dict(test_dataset1) 
+        #print(type(test_dataset1))
         #random.shuffle(self.train_dataset)
         #self.test_dataset = [self.test_split[i] for i in self.test_id]
-        self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
+        #===># self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
+        train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=0.5,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
+        self.test_dataset = Dataset.from_dict(test_dataset2)
     
     def create_prompt(self, model_name):
         
@@ -221,10 +229,10 @@ class BaseProcessor:
         }
         self.model_kwargs.update(test_kwargs)
         
-        print(prompts_cali[0])
-        print("==============================")
-        print(prompts[0])
-        print("==============================")
+        # print(prompts_cali[0])
+        # print("==============================")
+        # print(prompts[0])
+        # print("==============================")
        
         return prompts , prompts_cali , prompts_cali2 , prompts_cali3
         
@@ -233,6 +241,7 @@ class SST2Processor(BaseProcessor):
         
         self.k = k
         self.kate = kate
+        self.seed = seed
         self.kate_metric = kate_metric
         self.reversed = reversed
         self.dataset_name = "SetFit/sst2"

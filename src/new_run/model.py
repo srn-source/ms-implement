@@ -144,7 +144,7 @@ class GPT2Wrapper:
             
             logits = logits_all[i, self.label_ids]
             #print("logits = ",logits)
-            probs= F.softmax(logits.detach().cpu(), dim=0)
+            probs= F.softmax(logits, dim=0)
             #print("logits == ", logits)
             pred = logits.argmax(0)
             completion1 = self.labels[pred]
@@ -218,9 +218,11 @@ class GPT2Wrapper:
             print(probs_cali2)
             print(probs_cali3)
             raw_cali_probs = torch.stack([probs_cali[0] , probs_cali2[0], probs_cali3[0]])
+            
+            print("raw_cali_mean = ",raw_cali_probs.mean(dim=0))
             W = 1.0 / raw_cali_probs.mean(dim=0)
             #W = 1.0 / probs_cali[0]
-            print("raw_cali_probs" , raw_cali_probs)
+            #print("raw_cali_probs" , raw_cali_probs)
             print("W" , W)
             for j , p_ori in enumerate(probs):
                 
