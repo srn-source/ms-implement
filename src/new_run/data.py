@@ -12,7 +12,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import pairwise
 from datasets import load_dataset, Dataset, DatasetDict
 from sklearn.model_selection import train_test_split
-
+from typing import Dict, List, Optional
 logging.basicConfig(level = logging.INFO)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -153,9 +153,14 @@ class BaseProcessor:
         #print(type(test_dataset1))
         #random.shuffle(self.train_dataset)
         #self.test_dataset = [self.test_split[i] for i in self.test_id]
-        #===># self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
-        train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=0.5,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
+        #self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
+        train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=300,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
         self.test_dataset = Dataset.from_dict(test_dataset2)
+        
+        #self.test_dataset = self.test_split
+        if self.dataset_name in ["ag_news"]:
+            self.train_dataset = self.train_dataset.map(self.convert_example_to_template_fields)
+            self.test_dataset = self.test_dataset.map(self.convert_example_to_template_fields)
     
     def create_prompt(self, model_name):
         
@@ -226,6 +231,7 @@ class BaseProcessor:
         test_kwargs = {
            "labels": self.labels,
            "label_test": label_test,
+           #"labels_token_gpt3":self.labels_token_gpt3
         }
         self.model_kwargs.update(test_kwargs)
         
@@ -237,7 +243,7 @@ class BaseProcessor:
         return prompts , prompts_cali , prompts_cali2 , prompts_cali3
         
 class SST2Processor(BaseProcessor):
-    def __init__(self, seed: int = 87 , k: int = 4 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False) :
+    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False) :
         
         self.k = k
         self.kate = kate
@@ -250,6 +256,32 @@ class SST2Processor(BaseProcessor):
         self.eval_template = "Review: {text}\n" "Sentiment:"
         
         self.labels = ["negative", "positive"]
+        #https://platform.openai.com/tokenizer?view=bpe
+        #self.labels_token_gpt3 = [4633, 3967]
         self.model_kwargs = {"labels": self.labels }
         self.generate_datasets(seed)
         
+        
+
+class AGNewsProcessor(BaseProcessor):
+    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False) :
+        
+        
+        self.k = k
+        self.kate = kate
+        self.seed = seed
+        self.kate_metric = kate_metric
+        self.reversed = reversed
+        self.dataset_name = "ag_news"
+        self.prompt_start = "Below is couple of news article and their corresponding answer. Write an answer that appropriately completes the request.\n\n"
+        #self.prompt_start = ""
+        self.train_template = "Article: {text}\n" "Answer: {label_text}\n\n"
+        self.eval_template = "Article: {text}\n" "Answer:"
+        
+        self.labels = ["World", "Sports", "Business", "Technology"]
+        self.model_kwargs = {"labels": self.labels }
+        self.generate_datasets(seed)
+        
+    def convert_example_to_template_fields(self, example: Dict):
+            label_text = self.labels[example["label"]]
+            return {"text": example["text"], "label_text": label_text}

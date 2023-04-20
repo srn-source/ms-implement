@@ -9,28 +9,34 @@ import copy
 # from new_run import MODELS, PROCESSORS
 from data import (
     BaseProcessor,
-    SST2Processor
+    SST2Processor,
+    AGNewsProcessor
 )
 
 from model import (
     GPT2Wrapper,
-    LlamaWrapper
+    LlamaWrapper,
+    GPT3Wrapper
 )
 
 PROCESSORS = {
     "sst2": SST2Processor,
+    "agnews": AGNewsProcessor,
+    
 }
 
 MODELS = {"gpt2": GPT2Wrapper,
           "gpt2-medium": GPT2Wrapper,
           "gpt2-large": GPT2Wrapper,
+          "gpt2-xl": GPT2Wrapper,
           "llama": LlamaWrapper,
           "alpaca": LlamaWrapper,
           "alpaca-lora": LlamaWrapper,
           "gpt_j6b": GPT2Wrapper,
           "gpt4all_j": GPT2Wrapper,
           #"gpt4all_lora": GPT2Wrapper,
-          "dolly_v2_7b": GPT2Wrapper
+          "dolly_v2_7b": GPT2Wrapper,
+         "gpt3":GPT3Wrapper
           }
 
 
@@ -61,9 +67,9 @@ def main(args):
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="sst2" , help="SetFit/sst2, rotten_tomatoes")
+    parser.add_argument("--dataset", type=str, default="agnews" , help="SetFit/sst2, agnews")
     parser.add_argument("--method", type=str, default="direct")
-    parser.add_argument("--model_name", type=str, default="gpt2" , help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}")
+    parser.add_argument("--model_name", type=str, default="gpt3" , help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}")
     parser.add_argument("--ensemble", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
     parser.add_argument("--batch_size", type=int, default=16 )

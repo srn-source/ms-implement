@@ -8,16 +8,18 @@ from typing import Dict, List, Optional
 import torch.nn.functional as F
 # from peft import PeftModel
 from transformers import LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
-
+import openai
 from tqdm import tqdm
-
+import time
 logging.basicConfig(level = logging.INFO)
 
 
 MODELS_gen_hf = {
           "gpt2": "gpt2",
+          
           "gpt2-medium": "gpt2-medium",
           "gpt2-large": "gpt2-large",
+          "gpt2-xl": "gpt2-xl",
           "gpt_j6b":"EleutherAI/gpt-j-6b",
           "gpt4all_j":"nomic-ai/gpt4all-j",
           #"gpt4all_lora":"nomic-ai/gpt4all-lora",
@@ -102,8 +104,8 @@ class GPT2Wrapper:
         batch = self.tokenizer.batch_encode_plus(
             prompts, return_tensors="pt", padding=True
         )
-        # logging.info(batch[0].ids)
-        # logging.info(self.tokenizer.decode(batch[0].ids , skip_special_tokens=True) )
+        #logging.info(batch[0].ids)
+        #logging.info(self.tokenizer.decode(batch[0].ids , skip_special_tokens=True) )
 
         
         if batch["input_ids"].shape[1] > self.tokenizer.max_len_single_sentence:
@@ -532,4 +534,166 @@ class LlamaWrapper:
         print(np.mean(acc))
         
         return res
+
+
+class GPT3Wrapper:
+    def __init__(
+        self,
+        model_name: str,
+        
+        batch_size: int = 8,
+        k: int = 4,
+        kate: bool = False,
+        use_calibration: bool = False,
+        labels: List[str] = None,
+        label_test: List[str] = None,
+        #labels_token_gpt3: List[int] = None,
+    ): 
+            
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        openai.api_key = "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"
+        if self.device != "cuda":
+            logging.warning(f"Cannot find gpu, setting device to cpu.")
+        self.batch_size = batch_size
+        #self.calibrate = calibrate
+        logging.info(f"Setting batch_size={batch_size}")
+        
+        self.model_name  = "text-davinci-002"
+        
+        self.use_calibration = use_calibration
+        #self.labels_token_gpt3 = labels_token_gpt3
+        self.kate = kate
+        self.label_test = label_test
+        self.tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        logging.info(f"Initializing {model_name}")
+        
+        label_ids = []
+        print("labels == ",labels)
+        if labels is not None:
+            for label, label_encoded in zip(
+                labels,
+                self.tokenizer.batch_encode_plus([l for l in labels])[
+                    "input_ids"
+                ],
+            ):
+                print(label)
+                print(label_encoded)
+                label_id = label_encoded[0]
+                label_str = self.tokenizer.convert_ids_to_tokens(label_id)
+                if len(label_encoded) > 1:
+                    logging.warning(
+                        f"Cannot find matching id for {label}, using prefix {label_str}"
+                    )
+                label_ids.append(label_id)
+
+        self.labels = labels
+        self.label_ids = label_ids #torch.tensor(label_ids, dtype=torch.long).to(self.device)
+        logging.info(f"Labels: {labels}")
+        logging.info(f"label_ids: {label_ids}")
     
+    def complete_one(self, prompts):
+        def return_token_to_id(t):
+            encoded = self.tokenizer.encode(t)
+            assert len(encoded) == 1
+            return encoded[0]
+        #print(prompts)
+        label_to_logit = {}
+        raw = openai.Completion.create(
+                engine=self.model_name,
+                prompt=prompts,
+                max_tokens=1,
+                temperature=0.0,
+                logprobs=5,
+                logit_bias={label_id: 100 for label_id in self.label_ids},
+            )["choices"][0]
+        
+        #print("raw = ",raw)
+        raw_logits = {
+                return_token_to_id(k): v
+                for k, v in raw["logprobs"]["top_logprobs"][0].items()
+            }
+        #print("raw_logits = ",raw_logits)
+        
+        for label in raw_logits:
+            if label in self.label_ids:
+                label_to_logit[label] = raw_logits[label]
+        
+        #print(label_to_logit)
+        assert len(label_to_logit) == len(self.label_ids)
+        
+        probs = torch.tensor([label_to_logit[label] for label in self.label_ids]).exp()
+        
+        probs = probs / probs.sum()
+        completion = self.labels[probs.argmax().item()]
+        
+        # print("probs = ",probs)
+        # print("completion = ",completion)
+        
+        
+        
+        return completion , probs
+    
+    # def complete_all_cali(self , prompts):
+    #     outputs , probs_arr = self.complete_one([prompts])
+    #     print("outputs = ",outputs)
+    #     print("probs_arr = ",probs_arr)
+    #     return outputs , probs_arr
+    
+    def complete_all(self, prompts , prompts_cali , prompts_cali2 , prompts_cali3):
+        res = [None] * len(prompts)
+        probs = [None] * len(prompts)
+        
+        #res = [self.complete_one(p) for p in tqdm(prompts)]
+        for j , p in enumerate(tqdm(prompts)):
+            time.sleep(1)
+            res[j] , probs[j] =  self.complete_one(p)
+            #print(ythtyhtyhtyhtyh)
+        
+        
+        if self.use_calibration:
+            assert self.kate == False
+            # print("prompts_cali[0] = ",prompts_cali[0])
+            # print("prompts_cali2[0] = ",prompts_cali2[0])
+            # print("prompts_cali3[0] = ",prompts_cali3[0])
+            res_cali , probs_cali = self.complete_one(prompts_cali[0])
+            res_cali2 , probs_cali2 = self.complete_one(prompts_cali2[0])
+            res_cali3 , probs_cali3 = self.complete_one(prompts_cali3[0])
+            res = [None] * len(prompts)
+            
+            print("probs_cali ===> ",probs_cali)
+            print("probs_cali2 ===> ",probs_cali2)
+            print("probs_cali3 ===> ",probs_cali3)
+            raw_cali_probs = torch.stack([probs_cali , probs_cali2, probs_cali3])
+            W = 1.0 / raw_cali_probs.mean(dim=0)
+            
+            print("raw_cali_probs == " , raw_cali_probs)
+            print("raw_cali_probs mean == " , raw_cali_probs.mean(dim=0))
+            print("W == " , W)
+            for j , p_ori in enumerate(probs):
+                
+                # print(p_cali[0], p_cali2[0],p_cali3[0])
+                
+                #print("raw_cali_probs ==== ",raw_cali_probs)
+                
+                #print("p_ori ==== ",p_ori)
+                #print("p_ori[0] ====== ",p_ori[0])
+                p_new = p_ori * W
+                #print("p_new ==== ",p_new)
+                p_new = p_new / p_new.sum()
+                #print("p_new ==== ",p_new)
+                #p_new = p_ori[0] - p_cali[0]
+                
+                
+                #pred1 = p_new.argmax(0)
+                #print("pred1 ==== ",pred1)
+                res[j] = self.labels[p_new.argmax(0)].strip()
+                #print("res[j] ==== ",self.labels[pred1.argmax().item()].strip())
+                
+        acc=[]
+        for pred,label_test in zip(res,self.label_test):
+            print(f"{str(pred)} , {str(label_test)}")
+            acc.append(str(pred.strip())==str(label_test.strip()))
+        
+        print(np.mean(acc))
+        return np.mean(acc)
+        
