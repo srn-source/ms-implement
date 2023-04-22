@@ -23,7 +23,14 @@ class BaseProcessor:
         return load_dataset(self.dataset_name)
     @cached_property
     def train_split(self):
-        return self.dataset["train"]
+        return self.dataset["train"].select([1,
+    0,
+    5,
+    2,
+    7,
+    6,
+    4,
+    3])
     @cached_property
     def val_split(self):
         return self.dataset["validation"]
@@ -148,16 +155,19 @@ class BaseProcessor:
         
         #dataset = load_dataset("my_dataset")
         # for balance dataset
-        train_dataset1, test_dataset1 = train_test_split(self.train_split, test_size=self.k,shuffle = True, random_state=self.seed , stratify=self.train_split["label"])
-        self.train_dataset = Dataset.from_dict(test_dataset1) 
+        #train_dataset1, test_dataset1 = train_test_split(self.train_split, test_size=self.k,shuffle = True, random_state=self.seed , stratify=self.train_split["label"])
+        #self.train_dataset = Dataset.from_dict(test_dataset1) 
         #print(type(test_dataset1))
         #random.shuffle(self.train_dataset)
         #self.test_dataset = [self.test_split[i] for i in self.test_id]
         #self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
-        train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=1000,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
-        self.test_dataset = Dataset.from_dict(test_dataset2)
-        
-        #self.test_dataset = self.test_split
+        #train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=20,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
+        #self.test_dataset = Dataset.from_dict(test_dataset2)
+        random_train_ids = random.sample(range(len(self.train_split)), k=self.k)
+        self.train_dataset =self.train_split.select(random_train_ids)
+
+        random_test_ids = random.sample(range(len(self.test_split)), k=500)
+        self.test_dataset = self.test_split.select(random_test_ids)
         if self.dataset_name in ["ag_news"]:
             self.train_dataset = self.train_dataset.map(self.convert_example_to_template_fields)
             self.test_dataset = self.test_dataset.map(self.convert_example_to_template_fields)
@@ -216,8 +226,11 @@ class BaseProcessor:
             # random.shuffle(self.train_dataset)
             # print("after shuffle = " , self.train_dataset)
             for data_example in self.train_dataset:
+                
                 prompt = prompt + self.train_template.format(**data_example)
+                print("data_example = ",data_example)
             for data_test in self.test_dataset:
+                print("data_test = ",data_test)
                 prompts.append(prompt + self.eval_template.format(**data_test))
                 
                 prompts_cali.append(prompt + self.eval_template.format(**cali))
@@ -235,10 +248,10 @@ class BaseProcessor:
         }
         self.model_kwargs.update(test_kwargs)
         
-        # print(prompts_cali[0])
-        # print("==============================")
-        # print(prompts[0])
-        # print("==============================")
+        print(prompts_cali[0])
+        print("==============================")
+        print(prompts[0])
+        print("==============================")
        
         return prompts , prompts_cali , prompts_cali2 , prompts_cali3
         
