@@ -205,7 +205,13 @@ class GPT2Wrapper:
             
         
         #print("probs == ",probs)
+        acc=[]
+        for pred,label_test in zip(res,self.label_test):
+            #print(f"{str(pred)} , {str(label_test)}")
+            acc.append(str(pred)==str(label_test))
         
+        no_cali = np.mean(acc)
+        print("no_cali = ", no_cali)
         if self.use_calibration:
             assert self.kate == False
             print("prompts_cali[0] = ",prompts_cali[0])
@@ -266,12 +272,12 @@ class GPT2Wrapper:
             #     pred1 = p_new.argmax(0)
             #     res[j] = self.labels[pred1].strip()
             
-        acc=[]
-        for pred,label_test in zip(res,self.label_test):
-            #print(f"{str(pred)} , {str(label_test)}")
-            acc.append(str(pred)==str(label_test))
-        
-        print(np.mean(acc))
+            acc=[]
+            for pred,label_test in zip(res,self.label_test):
+                #print(f"{str(pred)} , {str(label_test)}")
+                acc.append(str(pred)==str(label_test))
+            print("no_cali = ", no_cali)
+            print("cali = ",np.mean(acc))
         
         return res
     
@@ -336,7 +342,7 @@ class LlamaWrapper:
         if labels is not None:
             for label, label_encoded in zip(
                 labels,
-                self.tokenizer.batch_encode_plus([l for l in labels])[
+                self.tokenizer.batch_encode_plus([" " + l for l in labels])[
                     "input_ids"
                 ],
             ):
@@ -467,7 +473,14 @@ class LlamaWrapper:
             
         
         #print("probs == ",probs)
+        acc=[]
+        for pred,label_test in zip(res,self.label_test):
+            print(f"{str(pred)} , {str(label_test)}")
+            acc.append(str(pred.strip())==str(label_test.strip()))
         
+        no_cali = np.mean(acc)
+        print("No cali = ",no_cali)
+
         if self.use_calibration:
             assert self.kate == False
             print("prompts_cali[0] = ",prompts_cali[0])
@@ -526,12 +539,12 @@ class LlamaWrapper:
             #     pred1 = p_new.argmax(0)
             #     res[j] = self.labels[pred1].strip()
             
-        acc=[]
-        for pred,label_test in zip(res,self.label_test):
-            print(f"{str(pred)} , {str(label_test)}")
-            acc.append(str(pred.strip())==str(label_test.strip()))
-        
-        print(np.mean(acc))
+            acc=[]
+            for pred,label_test in zip(res,self.label_test):
+                print(f"{str(pred)} , {str(label_test)}")
+                acc.append(str(pred.strip())==str(label_test.strip()))
+            print("No cali = ",no_cali)
+            print("cali = ",np.mean(acc))
         
         return res
 
@@ -572,7 +585,7 @@ class GPT3Wrapper:
         if labels is not None:
             for label, label_encoded in zip(
                 labels,
-                self.tokenizer.batch_encode_plus([l for l in labels])[
+                self.tokenizer.batch_encode_plus([" " + l for l in labels])[
                     "input_ids"
                 ],
             ):
@@ -649,7 +662,12 @@ class GPT3Wrapper:
             res[j] , probs[j] =  self.complete_one(p)
             #print(ythtyhtyhtyhtyh)
         
-        
+        acc=[]
+        for pred,label_test in zip(res,self.label_test):
+            print(f"{str(pred)} , {str(label_test)}")
+            acc.append(str(pred.strip())==str(label_test.strip()))
+        no_cali = np.mean(acc)
+        print("No cali" , no_cali)
         if self.use_calibration:
             assert self.kate == False
             # print("prompts_cali[0] = ",prompts_cali[0])
@@ -660,15 +678,15 @@ class GPT3Wrapper:
             res_cali3 , probs_cali3 = self.complete_one(prompts_cali3[0])
             res = [None] * len(prompts)
             
-            print("probs_cali ===> ",probs_cali)
-            print("probs_cali2 ===> ",probs_cali2)
-            print("probs_cali3 ===> ",probs_cali3)
+            # print("probs_cali ===> ",probs_cali)
+            # print("probs_cali2 ===> ",probs_cali2)
+            # print("probs_cali3 ===> ",probs_cali3)
             raw_cali_probs = torch.stack([probs_cali , probs_cali2, probs_cali3])
             W = 1.0 / raw_cali_probs.mean(dim=0)
             
-            print("raw_cali_probs == " , raw_cali_probs)
-            print("raw_cali_probs mean == " , raw_cali_probs.mean(dim=0))
-            print("W == " , W)
+            # print("raw_cali_probs == " , raw_cali_probs)
+            # print("raw_cali_probs mean == " , raw_cali_probs.mean(dim=0))
+            # print("W == " , W)
             for j , p_ori in enumerate(probs):
                 
                 # print(p_cali[0], p_cali2[0],p_cali3[0])
@@ -689,11 +707,12 @@ class GPT3Wrapper:
                 res[j] = self.labels[p_new.argmax(0)].strip()
                 #print("res[j] ==== ",self.labels[pred1.argmax().item()].strip())
                 
-        acc=[]
-        for pred,label_test in zip(res,self.label_test):
-            print(f"{str(pred)} , {str(label_test)}")
-            acc.append(str(pred.strip())==str(label_test.strip()))
-        
-        print(np.mean(acc))
+            acc=[]
+            for pred,label_test in zip(res,self.label_test):
+                print(f"{str(pred)} , {str(label_test)}")
+                acc.append(str(pred.strip())==str(label_test.strip()))
+            
+            print("No cali" , no_cali)
+            print("cali" , np.mean(acc))
         return np.mean(acc)
         

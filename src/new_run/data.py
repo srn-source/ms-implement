@@ -154,7 +154,7 @@ class BaseProcessor:
         #random.shuffle(self.train_dataset)
         #self.test_dataset = [self.test_split[i] for i in self.test_id]
         #self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
-        train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=300,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
+        train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=1000,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
         self.test_dataset = Dataset.from_dict(test_dataset2)
         
         #self.test_dataset = self.test_split
