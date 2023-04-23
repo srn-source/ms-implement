@@ -14,9 +14,10 @@ import time
 logging.basicConfig(level = logging.INFO)
 
 
+
 MODELS_gen_hf = {
           "gpt2": "gpt2",
-          
+          "stablelm": "stabilityai/stablelm-base-alpha-7b",
           "gpt2-medium": "gpt2-medium",
           "gpt2-large": "gpt2-large",
           "gpt2-xl": "gpt2-xl",
@@ -25,7 +26,6 @@ MODELS_gen_hf = {
           #"gpt4all_lora":"nomic-ai/gpt4all-lora",
           "dolly_v2_7b":"databricks/dolly-v2-7b"
           }
-
 
 def to_device(tensor_dict, device):
     return {k: v.to(device) for k, v in tensor_dict.items()}

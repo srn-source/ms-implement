@@ -161,6 +161,21 @@ class BaseProcessor:
         #self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
         #train_dataset2, test_dataset2 = train_test_split(self.test_split, test_size=20,shuffle = True, random_state=self.seed , stratify=self.test_split["label"])
         #self.test_dataset = Dataset.from_dict(test_dataset2)
+
+
+        # list_of_k = []
+        # balance_k = int(self.k/ len(self.labels))
+        # for i in range(len(self.labels)):
+        #     start_with_ar = self.train_split.filter(lambda example: example["label"] == i)
+            
+        #     random_train_ids = random.sample(range(len(start_with_ar)), k= balance_k)
+        #     start_with_are =start_with_ar.select(random_train_ids)
+        #     for j in range(0,balance_k ):
+        #       list_of_k.append(start_with_are[j])
+        # random.shuffle(list_of_k)
+        # self.train_dataset = Dataset.from_list(list_of_k)
+
+
         random_train_ids = random.sample(range(len(self.train_split)), k=self.k)
         self.train_dataset =self.train_split.select(random_train_ids)
 

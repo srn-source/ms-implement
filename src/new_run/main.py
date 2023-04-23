@@ -25,10 +25,12 @@ PROCESSORS = {
     
 }
 
+
 MODELS = {"gpt2": GPT2Wrapper,
           "gpt2-medium": GPT2Wrapper,
           "gpt2-large": GPT2Wrapper,
           "gpt2-xl": GPT2Wrapper,
+          "stablelm": GPT2Wrapper,
           "llama": LlamaWrapper,
           "alpaca": LlamaWrapper,
           "alpaca-lora": LlamaWrapper,
@@ -38,7 +40,6 @@ MODELS = {"gpt2": GPT2Wrapper,
           "dolly_v2_7b": GPT2Wrapper,
          "gpt3":GPT3Wrapper
           }
-
 
 logging.basicConfig(level = logging.INFO)
 
