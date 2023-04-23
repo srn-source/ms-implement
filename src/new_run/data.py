@@ -23,21 +23,19 @@ class BaseProcessor:
         return load_dataset(self.dataset_name)
     @cached_property
     def train_split(self):
-        return self.dataset["train"].select([1,
-    0,
-    5,
-    2,
-    7,
-    6,
-    4,
-    3])
+        if self.dataset_name in ["ag_news"]:
+            return self.dataset["train"].map(self.convert_example_to_template_fields)
+        else:   
+            return self.dataset["train"]
     @cached_property
     def val_split(self):
         return self.dataset["validation"]
     @cached_property
     def test_split(self):
-        return self.dataset["test"]
-    
+        if self.dataset_name in ["ag_news"]:
+            return self.dataset["test"].map(self.convert_example_to_template_fields)
+        else:   
+            return self.dataset["test"]
     def chunks(self, lst, n):
         """Yield successive n-sized chunks from lst."""
         return [lst[i:i + n] for i in range(0, len(lst), n)]
@@ -166,11 +164,12 @@ class BaseProcessor:
         random_train_ids = random.sample(range(len(self.train_split)), k=self.k)
         self.train_dataset =self.train_split.select(random_train_ids)
 
-        random_test_ids = random.sample(range(len(self.test_split)), k=500)
+        random_test_ids = random.sample(range(len(self.test_split)), k=1000)
         self.test_dataset = self.test_split.select(random_test_ids)
-        if self.dataset_name in ["ag_news"]:
-            self.train_dataset = self.train_dataset.map(self.convert_example_to_template_fields)
-            self.test_dataset = self.test_dataset.map(self.convert_example_to_template_fields)
+
+        # if self.dataset_name in ["ag_news"]:
+        #     self.train_dataset = self.train_dataset.map(self.convert_example_to_template_fields)
+        #     self.test_dataset = self.test_dataset.map(self.convert_example_to_template_fields)
     
     def create_prompt(self, model_name):
         
@@ -208,8 +207,13 @@ class BaseProcessor:
                 # random.shuffle(data_example)
                 # print("after shuffle = " , data_example)
                 
-                train_dataset_info = [self.train_split[i] for i in data_example]
-                
+                train_dataset_info = [self.train_split[i]for i in data_example]
+                # print(type(train_dataset_info))
+                # print(train_dataset_info)
+                # #train_dataset_info= Dataset.from_dict(train_dataset_info) 
+                # if self.dataset_name in ["ag_news"]:
+                #     self.test_dataset = self.test_dataset.map(self.convert_example_to_template_fields)
+
                 for data_example_in in train_dataset_info:
                     #print(data_example_in)
                     prompt = prompt + self.train_template.format(**data_example_in)
@@ -226,13 +230,9 @@ class BaseProcessor:
             # random.shuffle(self.train_dataset)
             # print("after shuffle = " , self.train_dataset)
             for data_example in self.train_dataset:
-                
                 prompt = prompt + self.train_template.format(**data_example)
-                print("data_example = ",data_example)
             for data_test in self.test_dataset:
-                print("data_test = ",data_test)
                 prompts.append(prompt + self.eval_template.format(**data_test))
-                
                 prompts_cali.append(prompt + self.eval_template.format(**cali))
                 prompts_cali2.append(prompt + self.eval_template.format(**cali2))
                 prompts_cali3.append(prompt + self.eval_template.format(**cali3))

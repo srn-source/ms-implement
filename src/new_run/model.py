@@ -564,7 +564,7 @@ class GPT3Wrapper:
     ): 
             
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        openai.api_key = "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"
+        openai.api_key = ""
         if self.device != "cuda":
             logging.warning(f"Cannot find gpu, setting device to cpu.")
         self.batch_size = batch_size
