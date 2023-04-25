@@ -55,9 +55,9 @@ def main(args):
     seed_every_thing(args.train_seed)
     
     
-    
-    processor = PROCESSORS[args.dataset](args.train_seed, args.k , args.kate, args.kate_metric , args.reversed)
-    prompts, prompts_cali , prompts_cali2 , prompts_cali3= processor.create_prompt(args.model_name)
+    #model_send = MODELS[args.model_name](args.model_name , args.batch_size, args.k , args.kate, args.use_calibration, **processor.model_kwargs)
+    processor = PROCESSORS[args.dataset](args.train_seed, args.k , args.kate, args.kate_metric , args.reversed , args.model_name, args.entropy_ordering)
+    prompts, prompts_cali , prompts_cali2 , prompts_cali3 = processor.create_prompt(args.model_name)
     model_type = MODELS[args.model_name](args.model_name , args.batch_size, args.k , args.kate, args.use_calibration, **processor.model_kwargs)
     out_res = model_type.complete_all(prompts , prompts_cali,prompts_cali2 , prompts_cali3)
     #print(out_res)
@@ -68,10 +68,10 @@ def main(args):
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="agnews" , help="SetFit/sst2, agnews")
+    parser.add_argument("--dataset", type=str, default="sst2" , help="SetFit/sst2, agnews")
     parser.add_argument("--method", type=str, default="direct")
     parser.add_argument("--model_name", type=str, default="gpt3" , help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}")
-    parser.add_argument("--ensemble", default=False, action="store_true")
+    parser.add_argument("--entropy_ordering", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87 , help="{13|21|42|87|100}")
     parser.add_argument("--batch_size", type=int, default=16 )
     parser.add_argument("--k", type=int, default=8)

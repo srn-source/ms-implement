@@ -5,6 +5,7 @@ import torch
 from functools import cached_property
 from datasets import load_dataset
 import logging
+from itertools import permutations
 import copy
 from transformers import RobertaTokenizer, RobertaModel
 from tqdm import tqdm
@@ -14,8 +15,21 @@ from datasets import load_dataset, Dataset, DatasetDict
 from sklearn.model_selection import train_test_split
 from typing import Dict, List, Optional
 logging.basicConfig(level = logging.INFO)
-
+from transformers import LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import StoppingCriteria
 device = "cuda" if torch.cuda.is_available() else "cpu"
+import torch.nn.functional as F
+
+def entropy(probs: torch.FloatTensor) -> torch.FloatTensor:
+    return -(probs * torch.log2(probs)).nansum()
+
+def to_device(tensor_dict, device):
+    return {k: v.to(device) for k, v in tensor_dict.items()}
+class stop(StoppingCriteria):
+    def __call__(self, iids, _):
+        assert iids.shape[0] == 1
+        return iids[0][-2:].tolist() == [4906, 25] #"type" , "TYPE" , ":"
 
 class BaseProcessor:
     @cached_property
@@ -137,7 +151,211 @@ class BaseProcessor:
         kNN_dev_train = np.concatenate(kNN_dev_train, axis=0).tolist()
         
         return kNN_dev_train
+    def make_label_ids(self,tokenizer):
+        label_ids = []
+        for label, label_encoded in zip(
+                self.labels,
+                tokenizer.batch_encode_plus([" " + l for l in self.labels])[
+                    "input_ids"
+                ],
+            ):
+                print(label, label_encoded)
+                label_id = label_encoded[0]
+                label_str = tokenizer.convert_ids_to_tokens(label_id)
+                if len(label_encoded) > 1:
+                    logging.warning(
+                        f"Cannot find matching id for {label}, using prefix {label_str}"
+                    )
+                label_ids.append(label_id)
+        
+        self.label_ids = torch.tensor(label_ids, dtype=torch.long).to(device)
+        logging.info(f"label_ids: {label_ids}")
+    def initialize_model1(self,model_name):
+        if "/" not in model_name :
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            tokenizer.padding_side = "left"
+            tokenizer.pad_token = tokenizer.eos_token
+            model.eval().to(device)
+            
+            return model , tokenizer
+        else:
+            model = AutoModelForCausalLM.from_pretrained(model_name,
+                                                load_in_8bit=True,
+                                                torch_dtype=torch.float16,
+                                                device_map="auto",
+                                                )
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            tokenizer.padding_side = "left"
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+            tokenizer.eos_token = tokenizer.eos_token
+            tokenizer.eos_token_id = tokenizer.eos_token_id
+            return model , tokenizer
+    def initialize_model2(self,model_name):
+        model = LLaMAForCausalLM.from_pretrained(model_name,
+                                                load_in_8bit=True,
+                                                torch_dtype=torch.float16,
+                                                device_map="auto",
+                                                )
+        tokenizer = LLaMATokenizer.from_pretrained(model_hf)
+        tokenizer.padding_side = "left"
+        tokenizer.add_bos_token = False
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.eos_token = tokenizer.eos_token
+        tokenizer.eos_token_id = tokenizer.eos_token_id
+        
+        return model , tokenizer
+    def initialize_all(self):
+        model1 = {
+                "gpt2": "gpt2",
+                "stablelm": "stabilityai/stablelm-base-alpha-7b",
+                "gpt2-medium": "gpt2-medium",
+                "gpt2-large": "gpt2-large",
+                "gpt2-xl": "gpt2-xl",
+                "gpt_j6b":"EleutherAI/gpt-j-6b",
+                "gpt4all_j":"nomic-ai/gpt4all-j",
+                #"gpt4all_lora":"nomic-ai/gpt4all-lora",
+                "dolly_v2_7b":"databricks/dolly-v2-7b"
+                }
+        model2 = {
+                "llama": "decapoda-research/llama-7b-hf",
+                "alpaca": "chavinlo/alpaca-native",
+                "alpaca-lora": "chainyo/alpaca-lora-7b",
+                }
+        model3 = {
+                "gpt3": "text-davinci-002"
+                }
+        model , tokenizer ,model_type  = "", "", ""
+        if self.model_name in model1.keys():
+            model , tokenizer = self.initialize_model1(model1[self.model_name])
+            self.make_label_ids(tokenizer)
+            model_type = "model1"
+        # elif self.model_name in model2.keys(): #please remind that tokenize dont have ""
+        #     model , tokenizer = self.initialize_model2(model2[self.model_name])
+        #     self.make_label_ids(tokenizer)
+        #     model_type = "model2"
+        # elif self.model_name in model3.keys():
+        #     model , tokenizer = self.initialize_model3(model3[self.model_name])
+        #     self.make_label_ids(tokenizer)
+        #     model_type = "model3"
+            
+        return model , tokenizer, model_type
     
+    def probe(self,prompt, model , tokenizer, model_type, gen_leng):
+        
+        decoded = ""
+        pred = 1000
+        if model_type =="model1":
+            # model , tokenizer = self.initialize_model1(model1[self.model_name])
+            # self.make_label_ids(tokenizer)
+            #print("prompt = ",prompt)
+            batch = tokenizer.encode_plus(
+            prompt, return_tensors="pt", padding=True
+            )
+            batch = to_device(batch, device)
+            input_length = batch["input_ids"].shape[1]
+            if gen_leng > 1:
+                with torch.no_grad():
+                    output = model.generate(
+                        **batch,
+                        max_length=input_length + gen_leng,
+                        output_hidden_states=True,
+                        do_sample=False,
+                        output_scores =True,
+                        no_repeat_ngram_size=3,
+                        temperature= 2.0,
+                        return_dict_in_generate =True,
+                        stopping_criteria=[stop()],
+                    )
+            else:
+                with torch.no_grad():
+                    output = model.generate(
+                        **batch,
+                        max_length=input_length + gen_leng,
+                        output_hidden_states=True,
+                        output_scores =True,
+                        do_sample =False,
+                        return_dict_in_generate =True
+                    )
+            encoded = output.sequences
+            decoded = tokenizer.batch_decode(encoded[:, input_length:], skip_special_tokens=True)
+            if gen_leng == 1:
+                #print("decoded == ",decoded)
+                logits_all = output.scores[0]
+                for i, raw_completion in enumerate(decoded):
+                    logits = logits_all[i,self.label_ids]
+                    # print("neg = " , logits_all[i][4633])
+                    # print("pos = " , logits_all[i][3967])
+                    # print("logits = ",logits)
+                    probs= F.softmax(logits, dim=0)
+                    pred = probs.argmax(0)
+                    #print(pred)
+                
+            #print("pred = ",pred)
+        
+        assert decoded != ""
+        return decoded , pred
+    
+    def globalentropy_ordering(self,random_train_ids):
+        
+        model , tokenizer, model_type = self.initialize_all()
+        template = "input: {text}\ntype: {label_text}\n\n"
+        probe_examples = []
+        for perm in tqdm(permutations(random_train_ids),  desc='Subsets', leave = False):
+            train_dataset =self.train_split.select(perm)
+            
+            prompt = ""
+            for data_example_in in train_dataset:
+                    prompt = prompt + template.format(**data_example_in)
+            prompt = prompt  + "input:"
+            #print(prompt)
+            
+            probe_raw , pred = self.probe(prompt, model , tokenizer, model_type , 128)
+            #print("probe_raw == ",probe_raw)
+            probe_str = probe_raw[0].strip().split("type")[0]
+            probe_str = probe_str.strip().split("TYPE")[0]
+            #print("perm == ",perm)
+            print("probe_str == ",probe_str)
+            probe_item = self.parse_probe_example(probe_str)
+            #print("probe_item == ",probe_item)
+            probe_examples.append(probe_item)
+            
+        prompt = ""
+        perm_to_entropy = {}
+        for perm in tqdm(permutations(random_train_ids),  desc='Subsets', leave = False):
+            
+            class_dist = [0] * len(self.labels)
+            prompt = self.prompt_start
+            #prompts = []
+            train_dataset = self.train_split.select(perm)
+            
+            for data_example in train_dataset:
+                prompt = prompt + self.train_template.format(**data_example)
+            for data_test in probe_examples:
+                prompts123 = prompt + self.eval_template.format(**data_test)
+                #print("prompts123 => ",prompts123)
+                label_ans , pred= self.probe(prompts123, model , tokenizer, model_type , 1)
+                class_dist[pred.item()] += 1
+                #prompts.append(prompt + self.eval_template.format(**data_test))
+            label_counts = torch.tensor(class_dist)
+            #print("label_counts ========== ", label_counts)
+            class_distribution = label_counts / label_counts.sum()
+            #print("class_distribution ========== ", class_distribution)
+            global_entropy = entropy(class_distribution)
+            #print("global_entropy ========== ", global_entropy.item())
+            perm_to_entropy[perm] = global_entropy.item()
+            
+        print(perm_to_entropy)
+        
+        
+        best_perm = max(perm_to_entropy.keys(), key=lambda k: perm_to_entropy[k])
+        
+        print("best_perm ====> ", list(best_perm))
+        # print(rtghrthrthrthrth)
+        
+        return list(best_perm)
     def generate_datasets(self, seed: int):
         logging.info(f"generating datasets using seed {seed}")
         print(self.dataset_name)
@@ -177,7 +395,18 @@ class BaseProcessor:
 
 
         random_train_ids = random.sample(range(len(self.train_split)), k=self.k)
+        ids_ordering = []
+        if self.entropy_ordering:
+            ids_ordering = self.globalentropy_ordering(random_train_ids)
+            
+        print("ids_ordering = ",ids_ordering)
+        print("random_train_ids = ", random_train_ids)
+        
+        #print(fghrthrth)
+        if len(ids_ordering) > 0:
+            random_train_ids = ids_ordering
         self.train_dataset =self.train_split.select(random_train_ids)
+        #print("random_train_ids ==> ",random_train_ids)
 
         random_test_ids = random.sample(range(len(self.test_split)), k=1000)
         self.test_dataset = self.test_split.select(random_test_ids)
@@ -263,49 +492,54 @@ class BaseProcessor:
         }
         self.model_kwargs.update(test_kwargs)
         
-        print(prompts_cali[0])
-        print("==============================")
-        print(prompts[0])
-        print("==============================")
+        # print(prompts_cali[0])
+        # print("==============================")
+        # print(prompts[0])
+        # print("==============================")
        
         return prompts , prompts_cali , prompts_cali2 , prompts_cali3
         
 class SST2Processor(BaseProcessor):
-    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False) :
+    #def __init__(self, seed , k , kate, kate_metric, reversed, model_class) :
+    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False ,model_name : str = "" , entropy_ordering: bool =False ) :
         
         self.k = k
         self.kate = kate
         self.seed = seed
         self.kate_metric = kate_metric
         self.reversed = reversed
+        self.entropy_ordering = entropy_ordering
         self.dataset_name = "SetFit/sst2"
         self.prompt_start = "Below is couple of movie reviews and their corresponding sentiments. Write a sentiment that appropriately completes the request.\n\n"
+        #self.prompt_start = ""
         self.train_template = "Review: {text}\n" "Sentiment: {label_text}\n\n"
         self.eval_template = "Review: {text}\n" "Sentiment:"
-        
+        self.model_name = model_name
         self.labels = ["negative", "positive"]
         #https://platform.openai.com/tokenizer?view=bpe
         #self.labels_token_gpt3 = [4633, 3967]
         self.model_kwargs = {"labels": self.labels }
         self.generate_datasets(seed)
-        
+    def parse_probe_example(self, s: str):
+        return {"text": s, "label_text": "positive"}
         
 
 class AGNewsProcessor(BaseProcessor):
-    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False) :
+    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False, model_name : str = "" , entropy_ordering: bool =False) :
         
         
         self.k = k
         self.kate = kate
         self.seed = seed
         self.kate_metric = kate_metric
+        self.entropy_ordering = entropy_ordering
         self.reversed = reversed
         self.dataset_name = "ag_news"
         self.prompt_start = "Below is couple of news article and their corresponding answer. Write an answer that appropriately completes the request.\n\n"
         #self.prompt_start = ""
         self.train_template = "Article: {text}\n" "Answer: {label_text}\n\n"
         self.eval_template = "Article: {text}\n" "Answer:"
-        
+        self.model_name = model_name
         self.labels = ["World", "Sports", "Business", "Technology"]
         self.model_kwargs = {"labels": self.labels }
         self.generate_datasets(seed)
@@ -313,3 +547,5 @@ class AGNewsProcessor(BaseProcessor):
     def convert_example_to_template_fields(self, example: Dict):
             label_text = self.labels[example["label"]]
             return {"text": example["text"], "label_text": label_text}
+    def parse_probe_example(self, s: str):
+        return {"text": s,"label_text": "World"}

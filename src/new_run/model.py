@@ -100,6 +100,25 @@ class GPT2Wrapper:
         self.label_ids = torch.tensor(label_ids, dtype=torch.long).to(self.device)
         logging.info(f"Labels: {labels}")
         
+    # def probe(model, prompt):
+        
+    #     batch = self.tokenizer.encode_plus(
+    #         prompts, return_tensors="pt", padding=True
+    #     )
+        
+    #     batch = to_device(batch, self.device)
+    #     input_length = batch["input_ids"].shape[1]
+    #     with torch.no_grad():
+    #         output = self.model.generate(
+    #             **batch,
+    #             max_length=input_length + 1,
+    #             output_hidden_states=True,
+    #             output_scores =True,
+    #             do_sample =False,
+    #             return_dict_in_generate =True
+    #         )
+    #     return self.tokenizer.decode(output[:, input_length:], skip_special_tokens=True)
+    
     def complete(self, prompts):
         batch = self.tokenizer.batch_encode_plus(
             prompts, return_tensors="pt", padding=True
