@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 import torch.nn.functional as F
 # from peft import PeftModel
 from transformers import LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
+#LLaMATokenizer, LLaMAForCausalLM, 
 import openai
 from tqdm import tqdm
 import time
@@ -361,7 +362,7 @@ class LlamaWrapper:
         if labels is not None:
             for label, label_encoded in zip(
                 labels,
-                self.tokenizer.batch_encode_plus([" " + l for l in labels])[
+                self.tokenizer.batch_encode_plus([l for l in labels])[
                     "input_ids"
                 ],
             ):
@@ -410,7 +411,6 @@ class LlamaWrapper:
                 **batch,
                 max_new_tokens=1,
                 output_hidden_states=True,
-                generation_config=generation_config,
                 output_scores =True,
                 do_sample =False,
                 return_dict_in_generate =True
@@ -494,7 +494,7 @@ class LlamaWrapper:
         #print("probs == ",probs)
         acc=[]
         for pred,label_test in zip(res,self.label_test):
-            print(f"{str(pred)} , {str(label_test)}")
+            #print(f"{str(pred)} , {str(label_test)}")
             acc.append(str(pred.strip())==str(label_test.strip()))
         
         no_cali = np.mean(acc)
@@ -560,7 +560,7 @@ class LlamaWrapper:
             
             acc=[]
             for pred,label_test in zip(res,self.label_test):
-                print(f"{str(pred)} , {str(label_test)}")
+                #print(f"{str(pred)} , {str(label_test)}")
                 acc.append(str(pred.strip())==str(label_test.strip()))
             print("No cali = ",no_cali)
             print("cali = ",np.mean(acc))

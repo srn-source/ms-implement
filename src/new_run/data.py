@@ -15,11 +15,33 @@ from datasets import load_dataset, Dataset, DatasetDict
 from sklearn.model_selection import train_test_split
 from typing import Dict, List, Optional
 logging.basicConfig(level = logging.INFO)
-from transformers import LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
+from transformers import  LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
+#LLaMATokenizer, LLaMAForCausalLM,
+import openai
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import StoppingCriteria
 device = "cuda" if torch.cuda.is_available() else "cpu"
 import torch.nn.functional as F
+
+model1 = {
+                "gpt2": "gpt2",
+                "stablelm": "stabilityai/stablelm-base-alpha-7b",
+                "gpt2-medium": "gpt2-medium",
+                "gpt2-large": "gpt2-large",
+                "gpt2-xl": "gpt2-xl",
+                "gpt_j6b":"EleutherAI/gpt-j-6b",
+                "gpt4all_j":"nomic-ai/gpt4all-j",
+                #"gpt4all_lora":"nomic-ai/gpt4all-lora",
+                "dolly_v2_7b":"databricks/dolly-v2-7b"
+                }
+model2 = {
+                "llama": "decapoda-research/llama-7b-hf",
+                "alpaca": "chavinlo/alpaca-native",
+                "alpaca-lora": "chainyo/alpaca-lora-7b",
+                }
+model3 = {
+                "gpt3": "text-davinci-002"
+                }
 
 def entropy(probs: torch.FloatTensor) -> torch.FloatTensor:
     return -(probs * torch.log2(probs)).nansum()
@@ -153,9 +175,12 @@ class BaseProcessor:
         return kNN_dev_train
     def make_label_ids(self,tokenizer):
         label_ids = []
+        sp = " "
+        if self.model_name in model2.keys():
+           sp = ""
         for label, label_encoded in zip(
                 self.labels,
-                tokenizer.batch_encode_plus([" " + l for l in self.labels])[
+                tokenizer.batch_encode_plus([ sp + l for l in self.labels])[
                     "input_ids"
                 ],
             ):
@@ -171,6 +196,7 @@ class BaseProcessor:
         self.label_ids = torch.tensor(label_ids, dtype=torch.long).to(device)
         logging.info(f"label_ids: {label_ids}")
     def initialize_model1(self,model_name):
+        print("initialize_model1 = ",model_name)
         if "/" not in model_name :
             model = AutoModelForCausalLM.from_pretrained(model_name)
             tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -193,49 +219,31 @@ class BaseProcessor:
             tokenizer.eos_token_id = tokenizer.eos_token_id
             return model , tokenizer
     def initialize_model2(self,model_name):
+        print("initialize_model2 = ",model_name)
         model = LLaMAForCausalLM.from_pretrained(model_name,
                                                 load_in_8bit=True,
                                                 torch_dtype=torch.float16,
                                                 device_map="auto",
                                                 )
-        tokenizer = LLaMATokenizer.from_pretrained(model_hf)
+        tokenizer = LLaMATokenizer.from_pretrained(model_name)
         tokenizer.padding_side = "left"
         tokenizer.add_bos_token = False
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.eos_token = tokenizer.eos_token
-        tokenizer.eos_token_id = tokenizer.eos_token_id
         
         return model , tokenizer
     def initialize_all(self):
-        model1 = {
-                "gpt2": "gpt2",
-                "stablelm": "stabilityai/stablelm-base-alpha-7b",
-                "gpt2-medium": "gpt2-medium",
-                "gpt2-large": "gpt2-large",
-                "gpt2-xl": "gpt2-xl",
-                "gpt_j6b":"EleutherAI/gpt-j-6b",
-                "gpt4all_j":"nomic-ai/gpt4all-j",
-                #"gpt4all_lora":"nomic-ai/gpt4all-lora",
-                "dolly_v2_7b":"databricks/dolly-v2-7b"
-                }
-        model2 = {
-                "llama": "decapoda-research/llama-7b-hf",
-                "alpaca": "chavinlo/alpaca-native",
-                "alpaca-lora": "chainyo/alpaca-lora-7b",
-                }
-        model3 = {
-                "gpt3": "text-davinci-002"
-                }
+        
         model , tokenizer ,model_type  = "", "", ""
         if self.model_name in model1.keys():
             model , tokenizer = self.initialize_model1(model1[self.model_name])
             self.make_label_ids(tokenizer)
             model_type = "model1"
-        # elif self.model_name in model2.keys(): #please remind that tokenize dont have ""
-        #     model , tokenizer = self.initialize_model2(model2[self.model_name])
-        #     self.make_label_ids(tokenizer)
-        #     model_type = "model2"
+        elif self.model_name in model2.keys(): #please remind that tokenize dont have ""
+            model , tokenizer = self.initialize_model2(model2[self.model_name])
+            self.make_label_ids(tokenizer)
+            model_type = "model2"
         # elif self.model_name in model3.keys():
         #     model , tokenizer = self.initialize_model3(model3[self.model_name])
         #     self.make_label_ids(tokenizer)
@@ -247,7 +255,12 @@ class BaseProcessor:
         
         decoded = ""
         pred = 1000
-        if model_type =="model1":
+        generation_config = GenerationConfig(
+                            temperature=0.0,
+                            top_p=0.95,
+                            repetition_penalty=1.15,
+                        )
+        if model_type in ["model1", "model2"]:
             # model , tokenizer = self.initialize_model1(model1[self.model_name])
             # self.make_label_ids(tokenizer)
             #print("prompt = ",prompt)
@@ -268,6 +281,7 @@ class BaseProcessor:
                         temperature= 2.0,
                         return_dict_in_generate =True,
                         stopping_criteria=[stop()],
+                        pad_token_id=tokenizer.eos_token_id
                     )
             else:
                 with torch.no_grad():
@@ -277,7 +291,9 @@ class BaseProcessor:
                         output_hidden_states=True,
                         output_scores =True,
                         do_sample =False,
-                        return_dict_in_generate =True
+                        generation_config=generation_config,
+                        return_dict_in_generate =True,
+                        pad_token_id=tokenizer.eos_token_id
                     )
             encoded = output.sequences
             decoded = tokenizer.batch_decode(encoded[:, input_length:], skip_special_tokens=True)
@@ -288,13 +304,14 @@ class BaseProcessor:
                     logits = logits_all[i,self.label_ids]
                     # print("neg = " , logits_all[i][4633])
                     # print("pos = " , logits_all[i][3967])
-                    # print("logits = ",logits)
+                    print("logits = ",logits)
                     probs= F.softmax(logits, dim=0)
                     pred = probs.argmax(0)
                     #print(pred)
                 
             #print("pred = ",pred)
         
+            
         assert decoded != ""
         return decoded , pred
     
@@ -315,7 +332,7 @@ class BaseProcessor:
             probe_raw , pred = self.probe(prompt, model , tokenizer, model_type , 128)
             #print("probe_raw == ",probe_raw)
             probe_str = probe_raw[0].strip().split("type")[0]
-            probe_str = probe_str.strip().split("TYPE")[0]
+            #probe_str = probe_str.strip().split("TYPE")[0]
             #print("perm == ",perm)
             print("probe_str == ",probe_str)
             probe_item = self.parse_probe_example(probe_str)
@@ -408,9 +425,9 @@ class BaseProcessor:
         self.train_dataset =self.train_split.select(random_train_ids)
         #print("random_train_ids ==> ",random_train_ids)
 
-        random_test_ids = random.sample(range(len(self.test_split)), k=1000)
-        self.test_dataset = self.test_split.select(random_test_ids)
-
+        #random_test_ids = random.sample(range(len(self.test_split)), k=1000)
+        #self.test_dataset = self.test_split.select(random_test_ids)
+        self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
         # if self.dataset_name in ["ag_news"]:
         #     self.train_dataset = self.train_dataset.map(self.convert_example_to_template_fields)
         #     self.test_dataset = self.test_dataset.map(self.convert_example_to_template_fields)
@@ -443,7 +460,7 @@ class BaseProcessor:
         
         if self.kate:
             list_train_ids = self.kate_process()
-            
+            print("kate id = ", list_train_ids)
             for data_example , data_test in zip(list_train_ids , self.test_dataset):
                 prompt = self.prompt_start
                 
@@ -513,7 +530,11 @@ class SST2Processor(BaseProcessor):
         self.prompt_start = "Below is couple of movie reviews and their corresponding sentiments. Write a sentiment that appropriately completes the request.\n\n"
         #self.prompt_start = ""
         self.train_template = "Review: {text}\n" "Sentiment: {label_text}\n\n"
-        self.eval_template = "Review: {text}\n" "Sentiment:"
+        if model_name in model2.keys(): 
+            self.eval_template = "Review: {text}\n" "Sentiment: "
+        else:
+            self.eval_template = "Review: {text}\n" "Sentiment:"
+
         self.model_name = model_name
         self.labels = ["negative", "positive"]
         #https://platform.openai.com/tokenizer?view=bpe
@@ -538,7 +559,10 @@ class AGNewsProcessor(BaseProcessor):
         self.prompt_start = "Below is couple of news article and their corresponding answer. Write an answer that appropriately completes the request.\n\n"
         #self.prompt_start = ""
         self.train_template = "Article: {text}\n" "Answer: {label_text}\n\n"
-        self.eval_template = "Article: {text}\n" "Answer:"
+        if model_name in model2.keys():
+          self.eval_template = "Article: {text}\n" "Answer: "
+        else:
+          self.eval_template = "Article: {text}\n" "Answer:"
         self.model_name = model_name
         self.labels = ["World", "Sports", "Business", "Technology"]
         self.model_kwargs = {"labels": self.labels }

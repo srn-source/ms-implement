@@ -68,7 +68,7 @@ def main(args):
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="sst2" , help="SetFit/sst2, agnews")
+    parser.add_argument("--dataset", type=str, default="agnews" , help="SetFit/sst2, agnews")
     parser.add_argument("--method", type=str, default="direct")
     parser.add_argument("--model_name", type=str, default="gpt3" , help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}")
     parser.add_argument("--entropy_ordering", default=False, action="store_true")
