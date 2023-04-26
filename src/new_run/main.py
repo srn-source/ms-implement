@@ -6,6 +6,7 @@ import random
 import torch
 import logging
 import copy
+import os
 # from new_run import MODELS, PROCESSORS
 from data import (
     BaseProcessor,
@@ -45,11 +46,18 @@ logging.basicConfig(level = logging.INFO)
 
 
 def seed_every_thing(train_seed):
+    # random.seed(train_seed)
+    # np.random.seed(train_seed)
+    # torch.manual_seed(train_seed)
+    # if torch.cuda.device_count() > 0:
+    #     torch.cuda.manual_seed_all(train_seed)
     random.seed(train_seed)
     np.random.seed(train_seed)
+    os.environ["PYTHONHASHSEED"] = str(train_seed)
     torch.manual_seed(train_seed)
-    if torch.cuda.device_count() > 0:
-        torch.cuda.manual_seed_all(train_seed)
+    torch.cuda.manual_seed(train_seed)  # type: ignore
+    torch.backends.cudnn.deterministic = True  # type: ignore
+    torch.backends.cudnn.benchmark = True  # type: ignore
 
 def main(args):
     seed_every_thing(args.train_seed)

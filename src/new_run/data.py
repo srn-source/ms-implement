@@ -22,7 +22,24 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import StoppingCriteria
 device = "cuda" if torch.cuda.is_available() else "cpu"
 import torch.nn.functional as F
-
+import os
+from collections import Counter
+def seed_every_thing(seed):
+    # random.seed(train_seed)
+    # np.random.seed(train_seed)
+    # torch.manual_seed(train_seed)
+    # if torch.cuda.device_count() > 0:
+    #     torch.cuda.manual_seed_all(train_seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)  # type: ignore
+    torch.backends.cudnn.deterministic = True  # type: ignore
+    torch.backends.cudnn.benchmark = True  # type: ignore
+    
+def deterministic_random(seed: int) -> random.Random:
+    return random.Random(seed)
 model1 = {
                 "gpt2": "gpt2",
                 "stablelm": "stabilityai/stablelm-base-alpha-7b",
@@ -93,10 +110,10 @@ class BaseProcessor:
         return np.concatenate(embeddings, axis=0)
     
     def kate_process(self):
-        tok = RobertaTokenizer.from_pretrained("roberta-base")
-        model = RobertaModel.from_pretrained("roberta-base")
+        tok = RobertaTokenizer.from_pretrained("roberta-large")
+        model = RobertaModel.from_pretrained("roberta-large")
     
-        logging.info("Start Encoder : {}".format("roberta-base"))
+        logging.info("Start Encoder : {}".format("roberta-large"))
         
         test_text = []
         test_label = []
@@ -255,11 +272,11 @@ class BaseProcessor:
         
         decoded = ""
         pred = 1000
-        generation_config = GenerationConfig(
-                            temperature=0.0,
-                            top_p=0.95,
-                            repetition_penalty=1.15,
-                        )
+        # generation_config = GenerationConfig(
+        #                     temperature=0.0,
+        #                     top_p=0.95,
+        #                     repetition_penalty=1.15,
+        #                 )
         if model_type in ["model1", "model2"]:
             # model , tokenizer = self.initialize_model1(model1[self.model_name])
             # self.make_label_ids(tokenizer)
@@ -291,7 +308,7 @@ class BaseProcessor:
                         output_hidden_states=True,
                         output_scores =True,
                         do_sample =False,
-                        generation_config=generation_config,
+                        #generation_config=generation_config,
                         return_dict_in_generate =True,
                         pad_token_id=tokenizer.eos_token_id
                     )
@@ -304,7 +321,7 @@ class BaseProcessor:
                     logits = logits_all[i,self.label_ids]
                     # print("neg = " , logits_all[i][4633])
                     # print("pos = " , logits_all[i][3967])
-                    print("logits = ",logits)
+                    #print("logits = ",logits)
                     probs= F.softmax(logits, dim=0)
                     pred = probs.argmax(0)
                     #print(pred)
@@ -332,7 +349,8 @@ class BaseProcessor:
             probe_raw , pred = self.probe(prompt, model , tokenizer, model_type , 128)
             #print("probe_raw == ",probe_raw)
             probe_str = probe_raw[0].strip().split("type")[0]
-            #probe_str = probe_str.strip().split("TYPE")[0]
+            probe_str = probe_str.strip().split("TYPE")[0]
+            probe_str = probe_str.strip().split("Type")[0]
             #print("perm == ",perm)
             print("probe_str == ",probe_str)
             probe_item = self.parse_probe_example(probe_str)
@@ -375,6 +393,7 @@ class BaseProcessor:
         return list(best_perm)
     def generate_datasets(self, seed: int):
         logging.info(f"generating datasets using seed {seed}")
+        seed_every_thing(self.seed)
         print(self.dataset_name)
         
         
@@ -411,7 +430,14 @@ class BaseProcessor:
         # self.train_dataset = Dataset.from_list(list_of_k)
 
 
-        random_train_ids = random.sample(range(len(self.train_split)), k=self.k)
+        # list_train_ids = self.kate_process()
+        # random_train_ids = self.make_represent(list_train_ids)
+        # print("random_train_ids_with_kate = ", random_train_ids)
+        
+        random_train_ids = deterministic_random(self.seed).sample(range(len(self.train_split)), k=self.k)
+        print("random_train_ids = ", random_train_ids)
+        
+        
         ids_ordering = []
         if self.entropy_ordering:
             ids_ordering = self.globalentropy_ordering(random_train_ids)
@@ -419,19 +445,28 @@ class BaseProcessor:
         print("ids_ordering = ",ids_ordering)
         print("random_train_ids = ", random_train_ids)
         
+        
         #print(fghrthrth)
         if len(ids_ordering) > 0:
             random_train_ids = ids_ordering
         self.train_dataset =self.train_split.select(random_train_ids)
         #print("random_train_ids ==> ",random_train_ids)
 
-        #random_test_ids = random.sample(range(len(self.test_split)), k=1000)
-        #self.test_dataset = self.test_split.select(random_test_ids)
-        self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
+        random_test_ids = deterministic_random(42).sample(range(len(self.test_split)), k=1000)
+        self.test_dataset = self.test_split.select(random_test_ids)
+        #self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
         # if self.dataset_name in ["ag_news"]:
         #     self.train_dataset = self.train_dataset.map(self.convert_example_to_template_fields)
         #     self.test_dataset = self.test_dataset.map(self.convert_example_to_template_fields)
-    
+    def make_represent(self,list_train_ids):
+        ooo = []
+        for i in range(0,self.k):
+            counts = Counter(lst[i] for lst in list_train_ids)
+            max_count = min(counts.values())
+            output = [k for k, v in counts.items() if v == max_count][0]
+            ooo.append(output)
+        return ooo
+        
     def create_prompt(self, model_name):
         
         # if model_name =="llama":
@@ -460,6 +495,8 @@ class BaseProcessor:
         
         if self.kate:
             list_train_ids = self.kate_process()
+            new_list = self.make_represent(list_train_ids)
+            
             print("kate id = ", list_train_ids)
             for data_example , data_test in zip(list_train_ids , self.test_dataset):
                 prompt = self.prompt_start

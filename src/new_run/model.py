@@ -234,9 +234,9 @@ class GPT2Wrapper:
         print("no_cali = ", no_cali)
         if self.use_calibration:
             assert self.kate == False
-            print("prompts_cali[0] = ",prompts_cali[0])
-            print("prompts_cali2[0] = ",prompts_cali2[0])
-            print("prompts_cali3[0] = ",prompts_cali3[0])
+            # print("prompts_cali[0] = ",prompts_cali[0])
+            # print("prompts_cali2[0] = ",prompts_cali2[0])
+            # print("prompts_cali3[0] = ",prompts_cali3[0])
             res_cali , probs_cali = self.complete_all_cali(prompts_cali[0])
             res_cali2 , probs_cali2 = self.complete_all_cali(prompts_cali2[0])
             res_cali3 , probs_cali3 = self.complete_all_cali(prompts_cali3[0])
@@ -397,11 +397,11 @@ class LlamaWrapper:
                 f"prompt length {prompt_length} > "
                 f"model_max_length {model_max_length}"
             )
-        generation_config = GenerationConfig(
-                            temperature=0.0,
-                            top_p=0.95,
-                            repetition_penalty=1.15,
-                        )
+        # generation_config = GenerationConfig(
+        #                     temperature=0.0,
+        #                     top_p=0.95,
+        #                     repetition_penalty=1.15,
+        #                 )
         #print("batch = ", batch)
         batch = to_device(batch, self.device)
         input_length = batch["input_ids"].shape[1]
@@ -502,9 +502,9 @@ class LlamaWrapper:
 
         if self.use_calibration:
             assert self.kate == False
-            print("prompts_cali[0] = ",prompts_cali[0])
-            print("prompts_cali2[0] = ",prompts_cali2[0])
-            print("prompts_cali3[0] = ",prompts_cali3[0])
+            # print("prompts_cali[0] = ",prompts_cali[0])
+            # print("prompts_cali2[0] = ",prompts_cali2[0])
+            # print("prompts_cali3[0] = ",prompts_cali3[0])
             res_cali , probs_cali = self.complete_all_cali(prompts_cali[0])
             res_cali2 , probs_cali2 = self.complete_all_cali(prompts_cali2[0])
             res_cali3 , probs_cali3 = self.complete_all_cali(prompts_cali3[0])
