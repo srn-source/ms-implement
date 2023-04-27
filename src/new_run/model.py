@@ -227,7 +227,7 @@ class GPT2Wrapper:
         #print("probs == ",probs)
         acc=[]
         for pred,label_test in zip(res,self.label_test):
-            #print(f"{str(pred)} , {str(label_test)}")
+            print(f"{str(pred)} , {str(label_test)}")
             acc.append(str(pred)==str(label_test))
         
         no_cali = np.mean(acc)

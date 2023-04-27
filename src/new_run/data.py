@@ -89,6 +89,14 @@ class BaseProcessor:
             return self.dataset["test"].map(self.convert_example_to_template_fields)
         else:   
             return self.dataset["test"]
+    # def train_split(self):
+    #     return self.dataset["train"]
+    # @cached_property
+    # def val_split(self):
+    #     return self.dataset["validation"]
+    # @cached_property
+    # def test_split(self):
+    #     return self.dataset["test"]
     def chunks(self, lst, n):
         """Yield successive n-sized chunks from lst."""
         return [lst[i:i + n] for i in range(0, len(lst), n)]
@@ -96,7 +104,7 @@ class BaseProcessor:
     def decode(self, tok, model, corpus ):
         embeddings = []
         
-        for corpus_tmp in tqdm(self.chunks(corpus, 128)):
+        for corpus_tmp in tqdm(self.chunks(corpus, 220)):
             encoding = tok.batch_encode_plus(corpus_tmp, padding=True, truncation=True)
             sentence_batch, attn_mask = encoding["input_ids"], encoding["attention_mask"]
             sentence_batch, attn_mask = torch.LongTensor(sentence_batch).to(device), torch.LongTensor(attn_mask).to(device)
@@ -118,7 +126,9 @@ class BaseProcessor:
         test_text = []
         test_label = []
         
-        for key in self.test_split:
+        
+        
+        for key in self.test_dataset: #dataset only want 1000 
             text = key['text'].strip()
             label = int(key['label'])
             test_text.append(text)
@@ -127,7 +137,7 @@ class BaseProcessor:
         train_text = []
         train_label = []
         
-        for key in self.train_split:
+        for key in self.train_split: #all train dataset
             text = key['text'].strip()
             label = int(key['label'])
             train_text.append(text)
@@ -188,7 +198,7 @@ class BaseProcessor:
         kNN_dev_train = [train_indices_np[indices[i]].reshape(1, -1) for i in range(len(indices))]
         #print(kNN_dev_train)
         kNN_dev_train = np.concatenate(kNN_dev_train, axis=0).tolist()
-        
+        assert len(self.test_dataset) == len(kNN_dev_train)
         return kNN_dev_train
     def make_label_ids(self,tokenizer):
         label_ids = []
@@ -297,7 +307,7 @@ class BaseProcessor:
                         no_repeat_ngram_size=3,
                         temperature= 2.0,
                         return_dict_in_generate =True,
-                        stopping_criteria=[stop()],
+                        #stopping_criteria=[stop()],
                         pad_token_id=tokenizer.eos_token_id
                     )
             else:
@@ -395,7 +405,8 @@ class BaseProcessor:
         logging.info(f"generating datasets using seed {seed}")
         seed_every_thing(self.seed)
         print(self.dataset_name)
-        
+        random_test_ids = deterministic_random(42).sample(range(len(self.test_split)), k=1000)
+        self.test_dataset = self.test_split.select(random_test_ids)
         
         #self.train_id = random.sample(range(len(self.train_split)), k=self.k)
         
@@ -430,12 +441,14 @@ class BaseProcessor:
         # self.train_dataset = Dataset.from_list(list_of_k)
 
 
-        # list_train_ids = self.kate_process()
-        # random_train_ids = self.make_represent(list_train_ids)
-        # print("random_train_ids_with_kate = ", random_train_ids)
+        
         
         random_train_ids = deterministic_random(self.seed).sample(range(len(self.train_split)), k=self.k)
         print("random_train_ids = ", random_train_ids)
+        
+        # list_train_ids = self.kate_process()
+        # random_train_ids = self.make_represent(list_train_ids)
+        # print("random_train_ids_with_kate = ", random_train_ids)
         
         
         ids_ordering = []
@@ -451,9 +464,8 @@ class BaseProcessor:
             random_train_ids = ids_ordering
         self.train_dataset =self.train_split.select(random_train_ids)
         #print("random_train_ids ==> ",random_train_ids)
+        
 
-        random_test_ids = deterministic_random(42).sample(range(len(self.test_split)), k=1000)
-        self.test_dataset = self.test_split.select(random_test_ids)
         #self.test_dataset = [self.test_split[i] for i in range(len(self.test_split))]
         # if self.dataset_name in ["ag_news"]:
         #     self.train_dataset = self.train_dataset.map(self.convert_example_to_template_fields)
@@ -495,9 +507,19 @@ class BaseProcessor:
         
         if self.kate:
             list_train_ids = self.kate_process()
-            new_list = self.make_represent(list_train_ids)
             
-            print("kate id = ", list_train_ids)
+            ids_ordering_list = []
+            
+            if self.entropy_ordering_kate:
+                for h in list_train_ids:
+                    ids_ordering = self.globalentropy_ordering(h)
+                    ids_ordering_list.append(ids_ordering)
+                #new_list = self.make_represent(list_train_ids)
+                print("list_train_ids old = ", list_train_ids)
+                print("ids_ordering_list new = ",ids_ordering_list)
+                list_train_ids = ids_ordering_list
+            
+            #print("kate id = ", list_train_ids)
             for data_example , data_test in zip(list_train_ids , self.test_dataset):
                 prompt = self.prompt_start
                 
@@ -555,12 +577,13 @@ class BaseProcessor:
         
 class SST2Processor(BaseProcessor):
     #def __init__(self, seed , k , kate, kate_metric, reversed, model_class) :
-    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False ,model_name : str = "" , entropy_ordering: bool =False ) :
+    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False ,model_name : str = "" , entropy_ordering: bool =False , entropy_ordering_kate: bool =False) :
         
         self.k = k
         self.kate = kate
         self.seed = seed
         self.kate_metric = kate_metric
+        self.entropy_ordering_kate = entropy_ordering_kate
         self.reversed = reversed
         self.entropy_ordering = entropy_ordering
         self.dataset_name = "SetFit/sst2"
@@ -583,7 +606,7 @@ class SST2Processor(BaseProcessor):
         
 
 class AGNewsProcessor(BaseProcessor):
-    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False, model_name : str = "" , entropy_ordering: bool =False) :
+    def __init__(self, seed: int = 87 , k: int = 8 , kate: bool = False, kate_metric: str = "euclidean" , reversed: bool =False, model_name : str = "" , entropy_ordering: bool =False, entropy_ordering_kate: bool =False) :
         
         
         self.k = k
@@ -591,6 +614,7 @@ class AGNewsProcessor(BaseProcessor):
         self.seed = seed
         self.kate_metric = kate_metric
         self.entropy_ordering = entropy_ordering
+        self.entropy_ordering_kate = entropy_ordering_kate
         self.reversed = reversed
         self.dataset_name = "ag_news"
         self.prompt_start = "Below is couple of news article and their corresponding answer. Write an answer that appropriately completes the request.\n\n"
