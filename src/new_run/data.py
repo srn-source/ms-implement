@@ -75,9 +75,21 @@ def to_device(tensor_dict, device):
 
 
 class stop(StoppingCriteria):
+    def __init__(self, tokenizer):
+      super().__init__()
+      self.stops = ["type:" ]
+      self.list_stop_token = tokenizer.batch_encode_plus([l for l in self.stops])["input_ids"]
+      #logging.info(f"stops label_ids: {self.list_stop_token}")
     def __call__(self, iids, _):
         assert iids.shape[0] == 1
-        return iids[0][-2:].tolist() == [4906, 25]  # "type" , "TYPE" , ":"
+        if iids[0][-2:].tolist() == self.list_stop_token[0]:# [4906, 25]:  "type" 
+           return True
+        # elif iids[0][-2:].tolist() == self.list_stop_token[1]:# [25216, 25]: "TYPE"
+        #    return True
+        # elif iids[0][-2:].tolist() == self.list_stop_token[2]: #[6030, 25]: "Type"
+        #    return True
+        else:
+           return False  # "type" , "TYPE" , ":" 
 
 
 class BaseProcessor:
@@ -356,7 +368,7 @@ class BaseProcessor:
                         no_repeat_ngram_size=3,
                         temperature=2.0,
                         return_dict_in_generate=True,
-                        stopping_criteria=[stop()],
+                        stopping_criteria=[stop(tokenizer)],
                         pad_token_id=tokenizer.eos_token_id,
                     )
             else:
@@ -426,12 +438,21 @@ class BaseProcessor:
             # print(prompt)
 
             probe_raw, pred = self.probe(prompt, model, tokenizer, model_type, 128)
-            # print("probe_raw == ",probe_raw)
+            #print("probe_raw == ",probe_raw)
             probe_str = probe_raw[0].strip().split("type:")[0]
             # probe_str = probe_str.strip().split("TYPE:")[0]
             # probe_str = probe_str.strip().split("Type:")[0]
+
+            # probe_str = probe_str.strip().split("type.")[0]
+            # probe_str = probe_str.strip().split("TYPE.")[0]
+            # probe_str = probe_str.strip().split("Type.")[0]
+
+            # probe_str = probe_str.strip().split("type\n")[0]
+            # probe_str = probe_str.strip().split("TYPE\n")[0]
+            # probe_str = probe_str.strip().split("Type\n")[0]
+
             # print("perm == ",perm)
-            # print("probe_str == ",probe_str)
+            #print("probe_str == ",probe_str)
             probe_item = self.parse_probe_example(probe_str)
             # print("probe_item == ",probe_item)
             probe_examples.append(probe_item)
