@@ -67,6 +67,7 @@ def main(args):
         args.model_name,
         args.entropy_ordering,
         args.entropy_ordering_kate,
+        args.perplexity_ordering
     )
     prompts, prompts_cali, prompts_cali2, prompts_cali3 = processor.create_prompt(
         args.model_name
@@ -100,6 +101,7 @@ if __name__ == "__main__":
         help="{gpt2|gpt2-medium|gpt2-large|llama|alpaca|alpaca-lora}",
     )
     parser.add_argument("--entropy_ordering", default=False, action="store_true")
+    parser.add_argument("--perplexity_ordering", default=False, action="store_true")
     parser.add_argument("--entropy_ordering_kate", default=False, action="store_true")
     parser.add_argument("--train_seed", type=int, default=87, help="{13|21|42|87|100}")
     parser.add_argument("--batch_size", type=int, default=16)

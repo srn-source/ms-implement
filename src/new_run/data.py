@@ -323,24 +323,23 @@ class BaseProcessor:
 
         return model, tokenizer, model_type
 
-    def perplexity(self, model, last_layer, tokens):
-        all_token_logits = model.lm_head(last_layer)
-        print("all_token_logits = ", all_token_logits.shape)
-        print("all_token_logits = ", all_token_logits)
-        all_token_nll = -F.log_softmax(all_token_logits, dim=1)[0:-1]
-        print("all_token_nll = ", all_token_nll.shape)
-        print("all_token_nll = ", all_token_nll)
-        actual_next_tokens = tokens[1:]
-        print("actual_next_tokens = ", actual_next_tokens)
-        next_token_nll = all_token_nll.gather(
-            dim=1, index=actual_next_tokens.unsqueeze(1)
-        )
-        perplexity = torch.exp(next_token_nll.mean())
-        if perplexity.isnan():
-            return torch.tensor(1.0)
-        return perplexity
-
-        return math.exp(loss)
+    def perplexity(self,random_train_ids ):
+        
+        model, tokenizer, model_type = self.initialize_all()
+        train_dataset = self.train_split.select(random_train_ids)
+        perm_to_entropy = {}
+        for i ,data_example_in in zip(random_train_ids,train_dataset):
+            inputs = tokenizer(data_example_in['text'], return_tensors = "pt").to(device)
+            loss = model(input_ids = inputs["input_ids"], labels = inputs["input_ids"]).loss
+            loss = torch.tensor(loss.item())
+            ppl2 = torch.exp(loss)
+            perm_to_entropy[ppl2] = i
+        print("perm_to_entropy ===> ",perm_to_entropy)
+        perm_to_entropy = dict(sorted(perm_to_entropy.items(), key=lambda x: x[0], reverse=True)) #max->min
+        print("perm_to_entropy ordering ===> ",perm_to_entropy)
+        best_perm = perm_to_entropy.values()
+        print("best_perm ==> perplexity", list(best_perm))
+        return list(best_perm)
 
     def probe(self, prompt, model, tokenizer, model_type, gen_leng):
         decoded = ""
@@ -426,6 +425,10 @@ class BaseProcessor:
 
     def globalentropy_ordering(self, random_train_ids):
         model, tokenizer, model_type = self.initialize_all()
+        #best_ppl = self.perplexity(model, tokenizer, random_train_ids)
+        
+        #return list(best_ppl)
+        
         template = "input: {text}\ntype: {label_text}\n\n"
         probe_examples = []
         for perm in tqdm(permutations(random_train_ids), desc="Subsets", leave=False):
@@ -544,6 +547,9 @@ class BaseProcessor:
         if self.entropy_ordering:
             ids_ordering = self.globalentropy_ordering(random_train_ids)
 
+        if self.perplexity_ordering:
+            ids_ordering = self.perplexity(random_train_ids)
+            
         print("ids_ordering = ", ids_ordering)
         print("random_train_ids = ", random_train_ids)
 
@@ -597,14 +603,14 @@ class BaseProcessor:
 
             ids_ordering_list = []
 
-            if self.entropy_ordering_kate:
-                for h in list_train_ids:
-                    ids_ordering = self.globalentropy_ordering(h)
-                    ids_ordering_list.append(ids_ordering)
-                # new_list = self.make_represent(list_train_ids)
-                print("list_train_ids old = ", list_train_ids)
-                print("ids_ordering_list new = ", ids_ordering_list)
-                list_train_ids = ids_ordering_list
+            # if self.entropy_ordering_kate:
+            #     for h in list_train_ids:
+            #         ids_ordering = self.globalentropy_ordering(h)
+            #         ids_ordering_list.append(ids_ordering)
+            #     # new_list = self.make_represent(list_train_ids)
+            #     print("list_train_ids old = ", list_train_ids)
+            #     print("ids_ordering_list new = ", ids_ordering_list)
+            #     list_train_ids = ids_ordering_list
 
             # print("kate id = ", list_train_ids)
             for data_example, data_test in zip(list_train_ids, self.test_dataset):
@@ -672,12 +678,14 @@ class SST2Processor(BaseProcessor):
         model_name: str = "",
         entropy_ordering: bool = False,
         entropy_ordering_kate: bool = False,
+        perplexity_ordering: bool = False,
     ):
         self.k = k
         self.kate = kate
         self.seed = seed
         self.kate_metric = kate_metric
         self.entropy_ordering_kate = entropy_ordering_kate
+        self.perplexity_ordering = perplexity_ordering
         self.reversed = reversed
         self.entropy_ordering = entropy_ordering
         self.dataset_name = "SetFit/sst2"
@@ -711,6 +719,7 @@ class AGNewsProcessor(BaseProcessor):
         model_name: str = "",
         entropy_ordering: bool = False,
         entropy_ordering_kate: bool = False,
+        perplexity_ordering: bool = False,
     ):
         self.k = k
         self.kate = kate
@@ -718,6 +727,7 @@ class AGNewsProcessor(BaseProcessor):
         self.kate_metric = kate_metric
         self.entropy_ordering = entropy_ordering
         self.entropy_ordering_kate = entropy_ordering_kate
+        self.perplexity_ordering = perplexity_ordering
         self.reversed = reversed
         self.dataset_name = "ag_news"
         self.prompt_start = "Below is couple of news article and their corresponding answer. Write an answer that appropriately completes the request.\n\n"
