@@ -603,14 +603,14 @@ class BaseProcessor:
 
             ids_ordering_list = []
 
-            # if self.entropy_ordering_kate:
-            #     for h in list_train_ids:
-            #         ids_ordering = self.globalentropy_ordering(h)
-            #         ids_ordering_list.append(ids_ordering)
-            #     # new_list = self.make_represent(list_train_ids)
-            #     print("list_train_ids old = ", list_train_ids)
-            #     print("ids_ordering_list new = ", ids_ordering_list)
-            #     list_train_ids = ids_ordering_list
+            if self.perplexity_ordering_kate:
+                for h in tqdm(list_train_ids):
+                    ids_ordering = self.perplexity(h)
+                    ids_ordering_list.append(ids_ordering)
+                # new_list = self.make_represent(list_train_ids)
+                print("list_train_ids old = ", list_train_ids)
+                print("ids_ordering_list new = ", ids_ordering_list)
+                list_train_ids = ids_ordering_list
 
             # print("kate id = ", list_train_ids)
             for data_example, data_test in zip(list_train_ids, self.test_dataset):
@@ -677,14 +677,14 @@ class SST2Processor(BaseProcessor):
         reversed: bool = False,
         model_name: str = "",
         entropy_ordering: bool = False,
-        entropy_ordering_kate: bool = False,
+        perplexity_ordering_kate: bool = False,
         perplexity_ordering: bool = False,
     ):
         self.k = k
         self.kate = kate
         self.seed = seed
         self.kate_metric = kate_metric
-        self.entropy_ordering_kate = entropy_ordering_kate
+        self.perplexity_ordering_kate = perplexity_ordering_kate
         self.perplexity_ordering = perplexity_ordering
         self.reversed = reversed
         self.entropy_ordering = entropy_ordering
@@ -718,7 +718,7 @@ class AGNewsProcessor(BaseProcessor):
         reversed: bool = False,
         model_name: str = "",
         entropy_ordering: bool = False,
-        entropy_ordering_kate: bool = False,
+        perplexity_ordering_kate: bool = False,
         perplexity_ordering: bool = False,
     ):
         self.k = k
@@ -726,7 +726,7 @@ class AGNewsProcessor(BaseProcessor):
         self.seed = seed
         self.kate_metric = kate_metric
         self.entropy_ordering = entropy_ordering
-        self.entropy_ordering_kate = entropy_ordering_kate
+        self.perplexity_ordering_kate = perplexity_ordering_kate
         self.perplexity_ordering = perplexity_ordering
         self.reversed = reversed
         self.dataset_name = "ag_news"
