@@ -26,8 +26,9 @@ MODELS_gen_hf = {
     "gpt2-xl": "gpt2-xl",
     "gpt_j6b": "EleutherAI/gpt-j-6b",
     "gpt4all_j": "nomic-ai/gpt4all-j",
-    "mpt":"mosaicml/mpt-7b",
+    "mpt": "mosaicml/mpt-7b",
     "dolly_v2_7b": "databricks/dolly-v2-7b",
+    "redpajama": "togethercomputer/RedPajama-INCITE-Base-7B-v0.1",
 }
 
 

@@ -31,9 +31,10 @@ MODELS = {
     "alpaca-lora": LlamaWrapper,
     "gpt_j6b": GPT2Wrapper,
     "gpt4all_j": GPT2Wrapper,
-     "mpt": GPT2Wrapper,
+    "mpt": GPT2Wrapper,
     "dolly_v2_7b": GPT2Wrapper,
     "gpt3": GPT3Wrapper,
+    "redpajama": GPT2Wrapper
 }
 
 logging.basicConfig(level=logging.INFO)
