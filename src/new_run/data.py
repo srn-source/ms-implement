@@ -58,6 +58,8 @@ model1 = {
     "mpt":"mosaicml/mpt-7b",
     "dolly_v2_7b": "databricks/dolly-v2-7b",
     "redpajama": "togethercomputer/RedPajama-INCITE-Base-7B-v0.1",
+    "redpajama_instruct": "togethercomputer/RedPajama-INCITE-Instruct-7B-v0.1",
+    "mpt_instruct": "mosaicml/mpt-7b-instruct",
 }
 
 model2 = {

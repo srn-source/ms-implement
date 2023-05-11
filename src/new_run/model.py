@@ -29,6 +29,8 @@ MODELS_gen_hf = {
     "mpt": "mosaicml/mpt-7b",
     "dolly_v2_7b": "databricks/dolly-v2-7b",
     "redpajama": "togethercomputer/RedPajama-INCITE-Base-7B-v0.1",
+    "redpajama_instruct": "togethercomputer/RedPajama-INCITE-Instruct-7B-v0.1",
+    "mpt_instruct": "mosaicml/mpt-7b-instruct",
 }
 
 
@@ -603,7 +605,7 @@ class GPT3Wrapper:
         # labels_token_gpt3: List[int] = None,
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        openai.api_key = "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"
+        openai.api_key = ""
         if self.device != "cuda":
             logging.warning(f"Cannot find gpu, setting device to cpu.")
         self.batch_size = batch_size

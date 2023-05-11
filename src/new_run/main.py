@@ -32,8 +32,10 @@ MODELS = {
     "gpt_j6b": GPT2Wrapper,
     "gpt4all_j": GPT2Wrapper,
     "mpt": GPT2Wrapper,
+    "mpt_instruct": GPT2Wrapper,
     "dolly_v2_7b": GPT2Wrapper,
     "gpt3": GPT3Wrapper,
+    "redpajama_instruct": GPT2Wrapper,
     "redpajama": GPT2Wrapper
 }
 
