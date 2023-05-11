@@ -574,15 +574,16 @@ class GPT3Wrapper:
         # labels_token_gpt3: List[int] = None,
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        openai.api_key = ""
+        openai.api_key = "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"
         if self.device != "cuda":
             logging.warning(f"Cannot find gpu, setting device to cpu.")
         self.batch_size = batch_size
         # self.calibrate = calibrate
         logging.info(f"Setting batch_size={batch_size}")
 
-        self.model_name = "text-davinci-002"
-
+        self.model_name = "text-curie-001" # "text-davinci-002" #"text-curie-001"
+        
+        logging.info(f"Let's use {self.model_name}")
         self.use_calibration = use_calibration
         # self.labels_token_gpt3 = labels_token_gpt3
         self.kate = kate
@@ -669,13 +670,13 @@ class GPT3Wrapper:
 
         # res = [self.complete_one(p) for p in tqdm(prompts)]
         for j, p in enumerate(tqdm(prompts)):
-            time.sleep(1)
+            #time.sleep(1)
             res[j], probs[j] = self.complete_one(p)
             # print(ythtyhtyhtyhtyh)
 
         acc = []
         for pred, label_test in zip(res, self.label_test):
-            print(f"{str(pred)} , {str(label_test)}")
+            #print(f"{str(pred)} , {str(label_test)}")
             acc.append(str(pred.strip()) == str(label_test.strip()))
         no_cali = np.mean(acc)
         print("No cali", no_cali)
@@ -718,7 +719,7 @@ class GPT3Wrapper:
 
             acc = []
             for pred, label_test in zip(res, self.label_test):
-                print(f"{str(pred)} , {str(label_test)}")
+                #print(f"{str(pred)} , {str(label_test)}")
                 acc.append(str(pred.strip()) == str(label_test.strip()))
 
             print("No cali", no_cali)
