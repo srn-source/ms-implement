@@ -55,7 +55,7 @@ model1 = {
     "gpt2-xl": "gpt2-xl",
     "gpt_j6b": "EleutherAI/gpt-j-6b",
     "gpt4all_j": "nomic-ai/gpt4all-j",
-    "mpt":"mosaicml/mpt-7b",
+    "mpt": "mosaicml/mpt-7b",
     "dolly_v2_7b": "databricks/dolly-v2-7b",
     "redpajama": "togethercomputer/RedPajama-INCITE-Base-7B-v0.1",
     "redpajama_instruct": "togethercomputer/RedPajama-INCITE-Instruct-7B-v0.1",
@@ -465,25 +465,9 @@ class BaseProcessor:
                 prompt = prompt + template.format(**data_example_in)
             prompt = prompt + "input:"
             # print(prompt)
-
             probe_raw, pred = self.probe(prompt, model, tokenizer, model_type, 128)
-            #print("probe_raw == ",probe_raw)
             probe_str = probe_raw[0].strip().split("type:")[0]
-            # probe_str = probe_str.strip().split("TYPE:")[0]
-            # probe_str = probe_str.strip().split("Type:")[0]
-
-            # probe_str = probe_str.strip().split("type.")[0]
-            # probe_str = probe_str.strip().split("TYPE.")[0]
-            # probe_str = probe_str.strip().split("Type.")[0]
-
-            # probe_str = probe_str.strip().split("type\n")[0]
-            # probe_str = probe_str.strip().split("TYPE\n")[0]
-            # probe_str = probe_str.strip().split("Type\n")[0]
-
-            # print("perm == ",perm)
-            #print("probe_str == ",probe_str)
             probe_item = self.parse_probe_example(probe_str)
-            # print("probe_item == ",probe_item)
             probe_examples.append(probe_item)
 
         prompt = ""
