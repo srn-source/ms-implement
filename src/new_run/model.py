@@ -1,7 +1,7 @@
 import numpy as np
 import random
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer,AutoConfig
 import logging
 import copy
 from typing import Dict, List, Optional
@@ -26,7 +26,7 @@ MODELS_gen_hf = {
     "gpt2-xl": "gpt2-xl",
     "gpt_j6b": "EleutherAI/gpt-j-6b",
     "gpt4all_j": "nomic-ai/gpt4all-j",
-    # "gpt4all_lora":"nomic-ai/gpt4all-lora",
+    "mpt":"mosaicml/mpt-7b",
     "dolly_v2_7b": "databricks/dolly-v2-7b",
 }
 
@@ -39,6 +39,21 @@ class GPT2Wrapper:
     def initialize_model(cls, model_name):
         if "/" not in model_name:
             return AutoModelForCausalLM.from_pretrained(model_name)
+        elif model_name == 'mosaicml/mpt-7b':
+            
+            config = AutoConfig.from_pretrained(
+                  'mosaicml/mpt-7b',
+                  trust_remote_code=True
+                  )
+            config.attn_config['attn_impl'] = 'torch'
+            
+            model = AutoModelForCausalLM.from_pretrained(
+             'mosaicml/mpt-7b',
+              config=config,
+              torch_dtype=torch.bfloat16,
+              trust_remote_code=True
+              )
+            return model
         else:
             return AutoModelForCausalLM.from_pretrained(
                 model_name,
@@ -66,9 +81,20 @@ class GPT2Wrapper:
 
         model_hf = MODELS_gen_hf[model_name]
         self.use_calibration = use_calibration
-        self.tokenizer = AutoTokenizer.from_pretrained(model_hf)
-        self.tokenizer.padding_side = "left"
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        if model_name =='mpt':
+            self.tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+            self.tokenizer.padding_side = "left"
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+            self.tokenizer.eos_token = self.tokenizer.eos_token
+            self.tokenizer.eos_token_id = self.tokenizer.eos_token_id
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_hf)
+            self.tokenizer.padding_side = "left"
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+
         self.label_test = label_test
         self.kate = kate
 
@@ -82,6 +108,8 @@ class GPT2Wrapper:
 
         if "/" not in model_hf:
             self.model.eval().to(self.device)
+        elif model_name == 'mpt':
+            self.model.to(self.device)
 
         label_ids = []
         if labels is not None:

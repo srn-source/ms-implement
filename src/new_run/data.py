@@ -19,7 +19,7 @@ from transformers import LLaMATokenizer, LLaMAForCausalLM, GenerationConfig
 
 # LLaMATokenizer, LLaMAForCausalLM,
 import openai
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from transformers import StoppingCriteria
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -55,7 +55,7 @@ model1 = {
     "gpt2-xl": "gpt2-xl",
     "gpt_j6b": "EleutherAI/gpt-j-6b",
     "gpt4all_j": "nomic-ai/gpt4all-j",
-    # "gpt4all_lora":"nomic-ai/gpt4all-lora",
+     "mpt":"mosaicml/mpt-7b",
     "dolly_v2_7b": "databricks/dolly-v2-7b",
 }
 model2 = {
@@ -272,7 +272,7 @@ class BaseProcessor:
             model.eval().to(device)
 
             return model, tokenizer
-        else:
+        elif model_name != "mosaicml/mpt-7b" :
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 load_in_8bit=True,
@@ -285,6 +285,28 @@ class BaseProcessor:
             tokenizer.pad_token_id = tokenizer.eos_token_id
             tokenizer.eos_token = tokenizer.eos_token
             tokenizer.eos_token_id = tokenizer.eos_token_id
+            return model, tokenizer
+        else:
+            config = AutoConfig.from_pretrained(
+                  'mosaicml/mpt-7b',
+                  trust_remote_code=True
+                  )
+            config.attn_config['attn_impl'] = 'torch'
+            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+            tokenizer.padding_side = "left"
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+            tokenizer.eos_token = tokenizer.eos_token
+            tokenizer.eos_token_id = tokenizer.eos_token_id
+
+            model = AutoModelForCausalLM.from_pretrained(
+             'mosaicml/mpt-7b',
+              config=config,
+              torch_dtype=torch.bfloat16,
+              trust_remote_code=True
+              )
+            model.eval().to(device)
+              
             return model, tokenizer
 
     def initialize_model2(self, model_name):
