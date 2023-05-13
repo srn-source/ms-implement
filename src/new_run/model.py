@@ -42,16 +42,16 @@ class GPT2Wrapper:
     def initialize_model(cls, model_name):
         if "/" not in model_name:
             return AutoModelForCausalLM.from_pretrained(model_name)
-        elif model_name == 'mosaicml/mpt-7b':
+        elif model_name in [ "mosaicml/mpt-7b" , "mosaicml/mpt-7b-instruct"]:
             
             config = AutoConfig.from_pretrained(
-                  'mosaicml/mpt-7b',
+                  model_name,
                   trust_remote_code=True
                   )
             config.attn_config['attn_impl'] = 'torch'
             
             model = AutoModelForCausalLM.from_pretrained(
-             'mosaicml/mpt-7b',
+              model_name,
               config=config,
               torch_dtype=torch.bfloat16,
               trust_remote_code=True
@@ -85,7 +85,7 @@ class GPT2Wrapper:
         model_hf = MODELS_gen_hf[model_name]
         self.use_calibration = use_calibration
 
-        if model_name =='mpt':
+        if model_name in ['mpt' , 'mpt_instruct' ]:
             self.tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
             self.tokenizer.padding_side = "left"
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -111,7 +111,7 @@ class GPT2Wrapper:
 
         if "/" not in model_hf:
             self.model.eval().to(self.device)
-        elif model_name == 'mpt':
+        elif model_name in ['mpt' , 'mpt_instruct' ]:
             self.model.to(self.device)
 
         label_ids = []

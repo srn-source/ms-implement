@@ -276,7 +276,7 @@ class BaseProcessor:
             model.eval().to(device)
 
             return model, tokenizer
-        elif model_name != "mosaicml/mpt-7b" :
+        elif model_name not in [ "mosaicml/mpt-7b" , "mosaicml/mpt-7b-instruct"]:
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 load_in_8bit=True,
@@ -292,7 +292,7 @@ class BaseProcessor:
             return model, tokenizer
         else:
             config = AutoConfig.from_pretrained(
-                  'mosaicml/mpt-7b',
+                  model_name,
                   trust_remote_code=True
                   )
             config.attn_config['attn_impl'] = 'torch'
@@ -304,7 +304,7 @@ class BaseProcessor:
             tokenizer.eos_token_id = tokenizer.eos_token_id
 
             model = AutoModelForCausalLM.from_pretrained(
-             'mosaicml/mpt-7b',
+              model_name,
               config=config,
               torch_dtype=torch.bfloat16,
               trust_remote_code=True
