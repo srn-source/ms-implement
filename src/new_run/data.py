@@ -273,6 +273,8 @@ class BaseProcessor:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             tokenizer.padding_side = "left"
             tokenizer.pad_token = tokenizer.eos_token
+            for param in model.parameters():
+                param.requires_grad = False
             model.eval().to(device)
 
             return model, tokenizer
@@ -283,6 +285,8 @@ class BaseProcessor:
                 torch_dtype=torch.float16,
                 device_map="auto",
             )
+            for param in model.parameters():
+                param.requires_grad = False
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             tokenizer.padding_side = "left"
             tokenizer.pad_token = tokenizer.eos_token
@@ -309,6 +313,10 @@ class BaseProcessor:
               torch_dtype=torch.bfloat16,
               trust_remote_code=True
               )
+            
+            for param in model.parameters():
+                param.requires_grad = False
+                
             model.eval().to(device)
               
             return model, tokenizer
@@ -321,6 +329,8 @@ class BaseProcessor:
             torch_dtype=torch.float16,
             device_map="auto",
         )
+        for param in model.parameters():
+            param.requires_grad = False
         tokenizer = LLaMATokenizer.from_pretrained(model_name)
         tokenizer.padding_side = "left"
         tokenizer.add_bos_token = False

@@ -86,7 +86,7 @@ class GPT2Wrapper:
         self.use_calibration = use_calibration
 
         if model_name in ['mpt' , 'mpt_instruct' ]:
-            self.tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+            self.tokenizer = AutoTokenizer.from_pretrained("")
             self.tokenizer.padding_side = "left"
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
